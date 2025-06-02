@@ -1,0 +1,25 @@
+fastapi==0.104.1
+uvicorn==0.23.2
+python-dotenv==1.0.0
+celery==5.3.4
+redis==5.0.1
+requests==2.31.0
+pydantic==2.4.2
+python-multipart==0.0.6
+prometheus-client==0.17.1
+python-json-logger==2.0.7
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+httpx==0.25.1
+docker==7.0.0
+pydantic-settings==2.1.0
+
+# Docker 和容器化支持
+docker-py==1.10.6
+
+# XML 处理
+lxml==4.9.3
+
+# 额外的工具
+pathlib2==2.3.7

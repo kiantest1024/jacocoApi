@@ -1,0 +1,56 @@
+# JaCoCo 扫描器 Docker 镜像
+# 用于在隔离环境中执行 Java 项目的 JaCoCo 覆盖率扫描
+
+FROM maven:3.9.4-openjdk-11-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装必要的工具
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    wget \
+    unzip \
+    xmlstarlet \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建必要的目录
+RUN mkdir -p /app/workspace \
+    && mkdir -p /app/configs \
+    && mkdir -p /app/reports \
+    && mkdir -p /app/scripts
+
+# 复制 Maven 配置文件
+COPY maven-configs/ /app/configs/
+
+# 复制扫描脚本
+COPY docker/scripts/ /app/scripts/
+
+# 设置脚本执行权限
+RUN chmod +x /app/scripts/*.sh
+
+# 设置 Maven 本地仓库
+ENV MAVEN_OPTS="-Dmaven.repo.local=/app/.m2/repository"
+
+# 预下载常用的 Maven 依赖
+RUN mvn dependency:resolve-sources -f /app/configs/jacoco-pom-overlay.xml || true
+
+# 创建扫描用户（非 root）
+RUN useradd -m -u 1000 scanner && \
+    chown -R scanner:scanner /app
+
+# 切换到扫描用户
+USER scanner
+
+# 设置环境变量
+ENV JAVA_HOME=/usr/local/openjdk-11
+ENV MAVEN_HOME=/usr/share/maven
+ENV PATH=$PATH:$MAVEN_HOME/bin
+
+# 暴露端口（如果需要）
+EXPOSE 8080
+
+# 默认命令
+CMD ["/app/scripts/scan.sh"]

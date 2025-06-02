@@ -1,0 +1,7 @@
+2025-05-07 11:37:03,200 - uvicorn.access - INFO - 127.0.0.1:14404 - "GET /health HTTP/1.1" 200
+2025-05-07 11:37:03,447 - uvicorn.access - INFO - 127.0.0.1:14404 - "GET /favicon.ico HTTP/1.1" 404
+2025-05-07 11:37:08,187 - uvicorn.access - INFO - 127.0.0.1:14404 - "GET /metrics HTTP/1.1" 200
+2025-05-07 11:37:12,931 - uvicorn.access - INFO - 127.0.0.1:14404 - "GET /docs HTTP/1.1" 200
+2025-05-07 11:54:20,441 - uvicorn.access - INFO - 127.0.0.1:18227 - "GET / HTTP/1.1" 404
+2025-05-07 11:55:19,663 - uvicorn.access - INFO - 127.0.0.1:18228 - "GET / HTTP/1.1" 404
+2025-05-07 11:55:24,586 - uvicorn.access - INFO - 127.0.0.1:18228 - "GET /health HTTP/1.1" 200

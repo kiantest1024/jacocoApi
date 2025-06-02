@@ -53,10 +53,21 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     LOG_FORMAT: str = os.getenv("LOG_FORMAT", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
+    # 服务器配置
+    SERVER_HOST: str = os.getenv("SERVER_HOST", "0.0.0.0")
+    SERVER_PORT: int = int(os.getenv("SERVER_PORT", "8001"))
+
+    # JaCoCo 扫描配置
+    DEFAULT_MAVEN_GOALS: str = os.getenv("DEFAULT_MAVEN_GOALS", "clean,test,jacoco:report")
+    DEFAULT_COVERAGE_THRESHOLD: float = float(os.getenv("DEFAULT_COVERAGE_THRESHOLD", "50.0"))
+    SCAN_TIMEOUT: int = int(os.getenv("SCAN_TIMEOUT", "1800"))
+    MAX_CONCURRENT_SCANS: int = int(os.getenv("MAX_CONCURRENT_SCANS", "3"))
+
     class Config:
         """Pydantic 配置。"""
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # 忽略额外的字段
 
 # 创建设置实例
 settings = Settings()

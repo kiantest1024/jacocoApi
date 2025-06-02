@@ -105,7 +105,7 @@ def create_test_ping_payload() -> Dict[str, Any]:
 
 
 def test_github_webhook(
-    base_url: str = "http://localhost:8000",
+    base_url: str = "http://localhost:8001",
     webhook_secret: str = "your_default_secret_token"
 ):
     """
@@ -189,7 +189,7 @@ def test_github_webhook(
     print("=== 测试完成 ===")
 
 
-def test_api_endpoints(base_url: str = "http://localhost:8000"):
+def test_api_endpoints(base_url: str = "http://localhost:8001"):
     """
     测试其他 API 端点。
     
@@ -224,7 +224,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="测试 GitHub Webhook API")
-    parser.add_argument("--url", default="http://localhost:8000", help="API 基础 URL")
+    parser.add_argument("--url", default="http://localhost:8001", help="API 基础 URL")
     parser.add_argument("--secret", default="your_default_secret_token", help="Webhook 密钥")
     parser.add_argument("--test-api", action="store_true", help="同时测试其他 API 端点")
     

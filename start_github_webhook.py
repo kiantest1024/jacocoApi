@@ -125,7 +125,7 @@ def start_api_server():
             sys.executable, '-m', 'uvicorn',
             'main:app',
             '--host', '0.0.0.0',
-            '--port', '8000',
+            '--port', '8001',
             '--reload'
         ]
         
@@ -177,9 +177,9 @@ def main():
         
         if api_process:
             logger.info("=== 服务启动完成 ===")
-            logger.info("API 文档: http://localhost:8000/docs")
-            logger.info("健康检查: http://localhost:8000/health")
-            logger.info("GitHub Webhook: http://localhost:8000/github/webhook")
+            logger.info("API 文档: http://localhost:8001/docs")
+            logger.info("健康检查: http://localhost:8001/health")
+            logger.info("GitHub Webhook: http://localhost:8001/github/webhook")
             logger.info("按 Ctrl+C 停止服务")
             
             # 等待进程

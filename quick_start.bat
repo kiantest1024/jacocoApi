@@ -98,15 +98,15 @@ REM 启动 FastAPI 服务器
 echo 启动 FastAPI 服务器...
 echo.
 echo 服务将在以下地址启动:
-echo   - API 服务: http://localhost:8000
-echo   - API 文档: http://localhost:8000/docs
-echo   - 健康检查: http://localhost:8000/health
-echo   - GitHub Webhook: http://localhost:8000/github/webhook
+echo   - API 服务: http://localhost:8001
+echo   - API 文档: http://localhost:8001/docs
+echo   - 健康检查: http://localhost:8001/health
+echo   - GitHub Webhook: http://localhost:8001/github/webhook
 echo.
 echo 按 Ctrl+C 停止服务
 echo.
 
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
 echo.
 echo 服务已停止

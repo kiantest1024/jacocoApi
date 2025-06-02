@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 
-def check_service_health(base_url="http://localhost:8000"):
+def check_service_health(base_url="http://localhost:8001"):
     """检查服务健康状态。"""
     try:
         response = requests.get(f"{base_url}/health", timeout=5)
@@ -26,7 +26,7 @@ def check_service_health(base_url="http://localhost:8000"):
         return False
 
 
-def test_github_webhook_ping(base_url="http://localhost:8000"):
+def test_github_webhook_ping(base_url="http://localhost:8001"):
     """测试 GitHub webhook ping 事件。"""
     print("\n=== 测试 GitHub Webhook Ping ===")
     
@@ -65,7 +65,7 @@ def test_github_webhook_ping(base_url="http://localhost:8000"):
         return False
 
 
-def test_github_webhook_push(base_url="http://localhost:8000"):
+def test_github_webhook_push(base_url="http://localhost:8001"):
     """测试 GitHub webhook push 事件。"""
     print("\n=== 测试 GitHub Webhook Push ===")
     
@@ -122,7 +122,7 @@ def test_github_webhook_push(base_url="http://localhost:8000"):
         return None
 
 
-def check_task_status(task_id, base_url="http://localhost:8000"):
+def check_task_status(task_id, base_url="http://localhost:8001"):
     """检查任务状态。"""
     if not task_id:
         return

@@ -1,23 +1,32 @@
-# Git Webhook JaCoCo 覆盖率统计 API
+# 通用 JaCoCo 覆盖率扫描服务
 
-基于 Docker 容器的 Git webhook 接收接口，用于自动触发 JaCoCo 覆盖率统计。**支持 GitHub 和 GitLab**，**无需修改原始 Java 项目的 pom.xml 文件**。
+**🚀 支持任何配置了 webhook 的 Maven 项目的自动化 JaCoCo 覆盖率扫描服务**
 
-## 📋 项目用途
+基于 Docker 容器的通用 Git webhook 接收接口，**无需为每个项目单独配置**，**支持 GitHub 和 GitLab**，**无需修改原始 Java 项目的 pom.xml 文件**。
 
-本项目是一个 **自动化代码覆盖率统计服务**，主要用于：
+## 📋 项目特色
 
-1. **接收 Git 仓库的 webhook 事件** (支持 GitHub 和 GitLab)
-2. **自动触发 Java 项目的 JaCoCo 覆盖率扫描**
+### 🌟 **通用性**
+- ✅ **零配置**: 任何 Maven 项目都可以直接使用，无需预先配置
+- ✅ **自动识别**: 自动从 webhook 中提取项目信息并生成配置
+- ✅ **多平台支持**: 同时支持 GitHub、GitLab、GitLab CE/EE
+- ✅ **智能适配**: 自动适配不同的 Git 服务器和项目结构
+
+### 🎯 **主要功能**
+1. **接收任何 Git 仓库的 webhook 事件** (GitHub/GitLab)
+2. **自动触发 Java Maven 项目的 JaCoCo 覆盖率扫描**
 3. **在 Docker 容器中隔离执行扫描**，避免污染主机环境
 4. **生成多格式的覆盖率报告** (XML、HTML、JSON)
-5. **提供 RESTful API** 供其他系统集成使用
+5. **自动发送飞书通知**，实时反馈扫描结果
+6. **增量代码更新**，提高扫描效率
 
 ### 🎯 适用场景
 
-- **CI/CD 流水线**: 在代码提交时自动生成覆盖率报告
-- **代码质量监控**: 持续跟踪项目的测试覆盖率变化
-- **多项目管理**: 统一管理多个 Java 项目的覆盖率统计
+- **企业级 CI/CD**: 为所有 Maven 项目提供统一的覆盖率扫描服务
+- **多项目管理**: 无需为每个项目单独配置，一个服务支持所有项目
+- **代码质量监控**: 持续跟踪所有项目的测试覆盖率变化
 - **团队协作**: 为开发团队提供实时的代码质量反馈
+- **快速集成**: 新项目只需配置 webhook 即可立即使用
 
 ## 🔧 主要功能
 
@@ -172,25 +181,40 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 ```
 
-### 仓库配置 (`config.py`)
+### 通用配置 (`config.py`)
+
+**🎉 无需为每个项目单独配置！** 系统使用通用配置自动适配所有项目：
 
 ```python
-SERVICE_CONFIG = {
-    "https://gitlab.complexdevops.com/kian/jacocoTest.git": {
-        "service_name": "jacocoTest",
-        "scan_method": "jacoco",
-        "project_type": "maven",
-        "docker_image": "jacoco-scanner:latest",
-        "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/57031f94-2e1a-473c-8efc-f371b648dfbe",
-        "coverage_threshold": 50.0,
-        "maven_goals": ["clean", "test", "jacoco:report"],
-        "report_formats": ["xml", "html", "json"],
-        "use_docker": True,
-        "use_incremental_update": True,  # 启用增量更新
-        "local_repo_path": "./repos/jacocoTest",  # 本地仓库路径
-    }
+# 通用扫描配置 - 适用于所有接收到webhook的项目
+DEFAULT_SCAN_CONFIG = {
+    "scan_method": "jacoco",
+    "project_type": "maven",
+    "docker_image": "jacoco-scanner:latest",
+    "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/57031f94-2e1a-473c-8efc-f371b648dfbe",
+    "coverage_threshold": 50.0,
+    "maven_goals": ["clean", "test", "jacoco:report"],
+    "report_formats": ["xml", "html", "json"],
+    "use_docker": True,
+    "use_incremental_update": True,
+    "scan_timeout": 1800,
+    "max_retries": 3,
+}
+
+# 可选：特定项目的自定义配置
+CUSTOM_PROJECT_CONFIG = {
+    # 如果某个项目需要特殊配置，可以在这里添加
+    # "project-name": {
+    #     "notification_webhook": "https://custom-webhook-url",
+    #     "coverage_threshold": 80.0,
+    # }
 }
 ```
+
+**✨ 自动功能**:
+- 🔄 **自动项目识别**: 从 webhook 中提取项目名称
+- 📁 **自动路径生成**: 根据项目名称生成本地存储路径
+- ⚙️ **智能配置**: 自动应用通用配置，支持项目特定覆盖
 
 ## 🌐 API 接口详情
 

@@ -1,7 +1,3 @@
-"""
-安全相关功能模块。
-"""
-
 import os
 import time
 import hmac

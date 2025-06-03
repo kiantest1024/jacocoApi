@@ -9,7 +9,8 @@ set -e
 REPO_URL=""
 COMMIT_ID=""
 BRANCH_NAME="main"
-PROJECT_PATH="/app/repos/jacocoTest"
+SERVICE_NAME="project"
+PROJECT_PATH="/app/repos/${SERVICE_NAME}"
 REPORTS_PATH="/app/reports"
 CONFIG_PATH="/app/configs"
 
@@ -34,6 +35,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --reports-path)
             REPORTS_PATH="$2"
+            shift 2
+            ;;
+        --service-name)
+            SERVICE_NAME="$2"
+            # 如果没有明确指定project-path，则使用service-name
+            if [[ "$PROJECT_PATH" == "/app/repos/project" ]]; then
+                PROJECT_PATH="/app/repos/${SERVICE_NAME}"
+            fi
             shift 2
             ;;
         *)

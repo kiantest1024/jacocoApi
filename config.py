@@ -1,185 +1,84 @@
 import os
-from dotenv import load_dotenv
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 from pydantic_settings import BaseSettings
+from dotenv import load_dotenv
 
-# 如果存在 .env 文件，则从中加载环境变量
 load_dotenv()
 
 class Settings(BaseSettings):
-    """从环境变量加载的应用程序设置，带有默认值。"""
-
-    # API 设置
-    API_TITLE: str = "JaCoCo Scan Trigger API"
-    API_DESCRIPTION: str = "用于从 Git webhooks 触发 JaCoCo 代码覆盖率扫描的 API"
+    API_TITLE: str = "Universal JaCoCo Scanner API"
+    API_DESCRIPTION: str = "Universal JaCoCo coverage scanner for any Maven project"
     API_VERSION: str = "1.0.0"
     DEBUG: bool = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
-
-    # 安全设置
+    
     GIT_WEBHOOK_SECRET: str = os.getenv("GIT_WEBHOOK_SECRET", "your_default_secret_token")
-    ALLOWED_ORIGINS: List[str] = os.getenv("ALLOWED_ORIGINS", "*").split(",")
-
-    # 速率限制
-    RATE_LIMIT_ENABLED: bool = os.getenv("RATE_LIMIT_ENABLED", "True").lower() in ("true", "1", "t")
-    RATE_LIMIT_REQUESTS: int = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
-    RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))
-
-    # Celery 的 Redis 配置
+    
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
     REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
-    REDIS_PASSWORD: Optional[str] = os.getenv("REDIS_PASSWORD")
-
+    
     @property
     def REDIS_URL(self) -> str:
-        """从组件构造 Redis URL。"""
-        if self.REDIS_PASSWORD:
-            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
-
-    # Celery 配置
-    CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", "")
-    CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "")
-
-    def get_celery_broker_url(self) -> str:
-        """获取 Celery 代理 URL，如果未设置则回退到 Redis URL。"""
-        return self.CELERY_BROKER_URL or self.REDIS_URL
-
-    def get_celery_result_backend(self) -> str:
-        """获取 Celery 结果后端 URL，如果未设置则回退到 Redis URL。"""
-        return self.CELERY_RESULT_BACKEND or self.REDIS_URL
-
-    # 日志设置
+    
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
-    LOG_FORMAT: str = os.getenv("LOG_FORMAT", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-
-    # 服务器配置
-    SERVER_HOST: str = os.getenv("SERVER_HOST", "0.0.0.0")
-    SERVER_PORT: int = int(os.getenv("SERVER_PORT", "8001"))
-
-    # JaCoCo 扫描配置
-    DEFAULT_MAVEN_GOALS: str = os.getenv("DEFAULT_MAVEN_GOALS", "clean,test,jacoco:report")
-    DEFAULT_COVERAGE_THRESHOLD: float = float(os.getenv("DEFAULT_COVERAGE_THRESHOLD", "50.0"))
     SCAN_TIMEOUT: int = int(os.getenv("SCAN_TIMEOUT", "1800"))
-    MAX_CONCURRENT_SCANS: int = int(os.getenv("MAX_CONCURRENT_SCANS", "3"))
-
+    
     class Config:
-        """Pydantic 配置。"""
         env_file = ".env"
         case_sensitive = True
-        extra = "ignore"  # 忽略额外的字段
+        extra = "ignore"
 
-# 创建设置实例
 settings = Settings()
-
-# 为了向后兼容
 GIT_WEBHOOK_SECRET = settings.GIT_WEBHOOK_SECRET
-CELERY_BROKER_URL = settings.get_celery_broker_url()
-CELERY_RESULT_BACKEND = settings.get_celery_result_backend()
+CELERY_BROKER_URL = settings.REDIS_URL
+CELERY_RESULT_BACKEND = settings.REDIS_URL
 
-# 服务配置映射
-# 将仓库 URL 映射到特定服务的配置
-SERVICE_CONFIG: Dict[str, Dict[str, Any]] = {
-    "git@your-git-server.com:user/service-a.git": {
-        "service_name": "service-a",
-        "scan_method": "solution1",
-        "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/08ce42ce-4136-476d-8aef-8517e0f5a616",
-        # ... 其他特定于服务的配置
-    },
-    "https://your-git-server.com/user/service-b.git": {
-        "service_name": "service-b",
-        "scan_method": "solution2",
-        "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/08ce42ce-4136-476d-8aef-8517e0f5a616",
-        "coverage_settings_path": "/path/to/your/coverage-settings.xml",
-        # ... 其他特定于服务的配置
-    },
-    # Java Login System 项目配置 (Docker 扫描)
-    "https://github.com/your-username/java-login-system.git": {
-        "service_name": "java-login-system",
-        "scan_method": "jacoco",
-        "project_type": "maven",
-        "docker_image": "jacoco-scanner:latest",
-        "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/08ce42ce-4136-476d-8aef-8517e0f5a616",
-        "coverage_threshold": 50.0,
-        "maven_goals": ["clean", "test", "jacoco:report"],
-        "report_formats": ["xml", "html"],
-        "use_docker": True,
-        # ... 其他特定于服务的配置
-    },
-    # 本地开发配置示例 (Docker 扫描)
-    "file:///d:/Personal/Script/GE/java-login-system": {
-        "service_name": "java-login-system-local",
-        "scan_method": "jacoco",
-        "project_type": "maven",
-        "docker_image": "jacoco-scanner:latest",
-        "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/08ce42ce-4136-476d-8aef-8517e0f5a616",
-        "coverage_threshold": 50.0,
-        "maven_goals": ["clean", "test", "jacoco:report"],
-        "report_formats": ["xml", "html"],
-        "use_docker": True,
-    },
-    # 测试用的本地仓库配置
-    "https://github.com/test/java-login-system.git": {
-        "service_name": "java-login-system-test",
-        "scan_method": "jacoco",
-        "project_type": "maven",
-        "docker_image": "jacoco-scanner:latest",
-        "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/08ce42ce-4136-476d-8aef-8517e0f5a616",
-        "coverage_threshold": 30.0,
-        "maven_goals": ["clean", "test", "jacoco:report"],
-        "report_formats": ["xml", "html"],
-        "use_docker": True,
-    },
-    # GitLab 测试项目配置
-    "https://gitlab.complexdevops.com/kian/jacocoTest.git": {
-        "service_name": "jacocoTest",
-        "scan_method": "jacoco",
-        "project_type": "maven",
-        "docker_image": "jacoco-scanner:latest",
-        "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/57031f94-2e1a-473c-8efc-f371b648dfbe",
-        "coverage_threshold": 50.0,
-        "maven_goals": ["clean", "test", "jacoco:report"],
-        "report_formats": ["xml", "html", "json"],
-        "use_docker": True,
-        "use_incremental_update": True,  # 启用增量更新
-        "local_repo_path": "./repos/jacocoTest",  # 本地仓库路径
-    }
-    # 根据需要添加更多仓库配置
+DEFAULT_SCAN_CONFIG: Dict[str, Any] = {
+    "scan_method": "jacoco",
+    "project_type": "maven",
+    "docker_image": "jacoco-scanner:latest",
+    "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/57031f94-2e1a-473c-8efc-f371b648dfbe",
+    "coverage_threshold": 50.0,
+    "maven_goals": ["clean", "test", "jacoco:report"],
+    "report_formats": ["xml", "html", "json"],
+    "use_docker": True,
+    "use_incremental_update": True,
+    "scan_timeout": 1800,
+    "max_retries": 3,
 }
 
-# 通过仓库 URL 获取服务配置的函数
-def get_service_config(repo_url: str) -> Optional[Dict[str, Any]]:
-    """
-    通过仓库 URL 获取服务配置。
-    如果需要，处理不同的 URL 格式（HTTP 与 SSH）。
+CUSTOM_PROJECT_CONFIG: Dict[str, Dict[str, Any]] = {}
 
-    参数:
-        repo_url: 仓库 URL（SSH 或 HTTP）
+def get_project_name_from_url(repo_url: str) -> str:
+    url = repo_url.replace('.git', '')
+    if '/' in url:
+        return url.split('/')[-1]
+    return url
 
-    返回:
-        服务配置字典，如果未找到则返回 None
-    """
-    # 直接查找
-    if repo_url in SERVICE_CONFIG:
-        return SERVICE_CONFIG[repo_url]
+def get_service_config(repo_url: str, project_name: str = None) -> Dict[str, Any]:
+    if not project_name:
+        project_name = get_project_name_from_url(repo_url)
+    
+    config = DEFAULT_SCAN_CONFIG.copy()
+    config.update({
+        "service_name": project_name,
+        "repo_url": repo_url,
+        "local_repo_path": f"./repos/{project_name}",
+    })
+    
+    if project_name in CUSTOM_PROJECT_CONFIG:
+        config.update(CUSTOM_PROJECT_CONFIG[project_name])
+    
+    return config
 
-    # 尝试规范化 URL 以进行查找（处理 HTTP 与 SSH 变体）
-    # 这是一个简单的示例 - 您可能需要更复杂的匹配逻辑
-    normalized_url = repo_url
-    if repo_url.startswith("git@"):
-        # 将 SSH URL 转换为 HTTP 格式以进行匹配
-        parts = repo_url.split(":")
-        if len(parts) == 2:
-            domain = parts[0].replace("git@", "")
-            path = parts[1]
-            normalized_url = f"https://{domain}/{path}"
-    elif repo_url.startswith("https://"):
-        # 将 HTTP URL 转换为 SSH 格式以进行匹配
-        parts = repo_url.replace("https://", "").split("/", 1)
-        if len(parts) == 2:
-            domain = parts[0]
-            path = parts[1]
-            normalized_url = f"git@{domain}:{path}"
+def is_supported_project_type(repo_url: str) -> bool:
+    return True
 
-    # 使用规范化的 URL 尝试查找
-    return SERVICE_CONFIG.get(normalized_url)
+def get_available_repos() -> List[str]:
+    return [
+        "任何配置了 webhook 的 Maven 项目",
+        "支持 GitHub 和 GitLab",
+        "自动检测项目类型",
+        "通用 JaCoCo 扫描服务"
+    ]

@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-飞书机器人通知模块。
-用于发送 JaCoCo 覆盖率报告到飞书群聊。
-"""
-
 import json
 import logging
 import requests

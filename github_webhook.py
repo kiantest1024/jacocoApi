@@ -1,8 +1,3 @@
-"""
-GitHub Webhook 处理器模块。
-专门处理来自 GitHub 的 webhook 请求，触发 JaCoCo 覆盖率统计。
-"""
-
 import json
 import logging
 import hashlib
@@ -15,11 +10,7 @@ from fastapi.responses import JSONResponse
 from config import settings, get_service_config
 from jacoco_tasks import celery_app
 
-
-# 设置日志记录器
 logger = logging.getLogger(__name__)
-
-# 创建路由器
 router = APIRouter(prefix="/github", tags=["GitHub Webhook"])
 
 
@@ -108,10 +99,11 @@ def parse_gitlab_payload(payload: Dict[str, Any]) -> Tuple[Optional[str], Option
                 project_name = project.get('name')
                 user_name = payload.get('user_name', 'user')
 
-                # 特殊处理：如果是 jacocoTest 项目，使用已知的完整URL
-                if project_name == "jacocoTest":
-                    repo_url = "https://gitlab.complexdevops.com/kian/jacocoTest.git"
-                    logger.info(f"识别为 jacocoTest 项目，使用配置的 URL: {repo_url}")
+                # 特殊处理：如果是 jacocoTest 或 jacocotest 项目，使用已知的完整URL
+                if project_name.lower() in ["jacocotest", "jacocoTest"]:
+                    # 使用实际的GitLab服务器地址
+                    repo_url = f"http://172.16.1.30/{user_name.lower()}/{project_name.lower()}.git"
+                    logger.info(f"识别为 jacoco 测试项目，使用配置的 URL: {repo_url}")
                 else:
                     # 默认构造逻辑
                     repo_url = f"https://gitlab.com/{user_name}/{project_name}.git"
@@ -439,38 +431,38 @@ async def webhook_handler_no_auth(request: Request):
                 }
             )
 
-        # 查找服务配置
+        # 获取通用扫描配置（支持所有项目）
         service_config = get_service_config(repo_url)
-        if not service_config:
-            logger.info(f"[{request_id}] 未找到仓库的配置: {repo_url}。忽略。")
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "status": "ignored",
-                    "message": f"未找到仓库 {repo_url} 的扫描配置",
-                    "available_repos": list(get_service_config.__globals__.get('SERVICE_CONFIG', {}).keys())
-                }
-            )
+        service_name = service_config['service_name']
+        logger.info(f"[{request_id}] 为项目 {service_name} 生成扫描配置")
 
-        # 模拟将扫描任务发送到 Celery（实际上不发送，只是返回成功）
-        fake_task_id = f"task_{request_id}"
+        # 发送 JaCoCo 扫描任务到 Celery
+        from jacoco_tasks import run_docker_jacoco_scan
 
-        logger.info(f"[{request_id}] 模拟 JaCoCo 扫描任务: {fake_task_id} 用于 {service_config['service_name']}")
+        task = run_docker_jacoco_scan.delay(
+            repo_url=repo_url,
+            commit_id=commit_id,
+            branch_name=branch_name,
+            service_config=service_config,
+            request_id=request_id
+        )
+
+        logger.info(f"[{request_id}] JaCoCo 扫描任务已排队: {task.id} 用于项目 {service_name}")
 
         # 返回成功响应
         return JSONResponse(
             status_code=200,
             content={
                 "status": "accepted",
-                "task_id": fake_task_id,
+                "task_id": task.id,
                 "request_id": request_id,
                 "event_type": event_type,
-                "message": f"服务 {service_config['service_name']} 的提交 {commit_id[:8]} 的 JaCoCo 扫描任务已成功排队（模拟）",
+                "message": f"项目 {service_name} 的提交 {commit_id[:8]} 的 JaCoCo 扫描任务已成功排队",
                 "extracted_info": {
                     "repo_url": repo_url,
                     "commit_id": commit_id,
                     "branch_name": branch_name,
-                    "service_name": service_config['service_name']
+                    "service_name": service_name
                 }
             }
         )

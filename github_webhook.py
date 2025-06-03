@@ -244,11 +244,11 @@ async def webhook_handler(
         # 读取请求体
         body = await request.body()
 
-        # 验证签名（如果配置了密钥）
+        # 验证签名（如果配置了密钥且不是默认值）
         if settings.GIT_WEBHOOK_SECRET and settings.GIT_WEBHOOK_SECRET != "your_default_secret_token":
             if is_gitlab:
                 # GitLab 使用简单的 token 验证
-                if x_gitlab_token != settings.GIT_WEBHOOK_SECRET:
+                if x_gitlab_token and x_gitlab_token != settings.GIT_WEBHOOK_SECRET:
                     logger.warning(f"[{request_id}] GitLab webhook token 验证失败")
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -256,12 +256,15 @@ async def webhook_handler(
                     )
             else:
                 # GitHub 使用 HMAC 签名验证
-                if not verify_github_signature(body, x_hub_signature_256, settings.GIT_WEBHOOK_SECRET):
+                if x_hub_signature_256 and not verify_github_signature(body, x_hub_signature_256, settings.GIT_WEBHOOK_SECRET):
                     logger.warning(f"[{request_id}] GitHub webhook 签名验证失败")
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                         detail="签名验证失败"
                     )
+        else:
+            # 如果使用默认密钥或未配置密钥，跳过验证
+            logger.info(f"[{request_id}] 跳过签名验证（使用默认配置或未配置密钥）")
         
         # 解析 JSON 负载
         try:
@@ -353,7 +356,7 @@ async def webhook_handler(
 async def test_github_webhook():
     """
     测试 GitHub webhook 端点。
-    
+
     返回:
         测试响应
     """
@@ -362,3 +365,113 @@ async def test_github_webhook():
         "message": "GitHub webhook 端点正常工作",
         "timestamp": time.time()
     }
+
+
+@router.post("/webhook-no-auth")
+async def webhook_handler_no_auth(request: Request):
+    """
+    处理 Git webhook 请求（无签名验证）。
+    临时端点，用于测试和调试。
+
+    参数:
+        request: FastAPI 请求对象
+
+    返回:
+        JSON 响应
+    """
+    request_id = f"noauth_{int(time.time())}_{id(request)}"
+    logger.info(f"[{request_id}] 收到无认证 webhook 请求")
+
+    try:
+        # 读取请求体
+        body = await request.body()
+
+        # 解析 JSON 负载
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            logger.error(f"[{request_id}] 无法解析 JSON 负载")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="无效的 JSON 负载"
+            )
+
+        logger.info(f"[{request_id}] 收到负载: {json.dumps(payload, indent=2, ensure_ascii=False)}")
+
+        # 解析负载（支持 GitHub 和 GitLab）
+        repo_url, commit_id, branch_name, event_type = parse_webhook_payload(payload)
+
+        logger.info(f"[{request_id}] 解析结果: repo_url={repo_url}, commit_id={commit_id}, branch_name={branch_name}, event_type={event_type}")
+
+        # 处理特殊事件类型
+        if event_type in ['branch_deleted', 'unsupported']:
+            logger.info(f"[{request_id}] 忽略事件类型: {event_type}")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "ignored",
+                    "message": f"忽略事件类型: {event_type}"
+                }
+            )
+
+        # 验证提取的信息
+        if not repo_url or not commit_id or not branch_name:
+            logger.error(f"[{request_id}] 无法从 payload 中提取所需信息")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "error",
+                    "message": "无法解析 webhook 负载，缺少仓库、提交或分支信息",
+                    "extracted": {
+                        "repo_url": repo_url,
+                        "commit_id": commit_id,
+                        "branch_name": branch_name,
+                        "event_type": event_type
+                    }
+                }
+            )
+
+        # 查找服务配置
+        service_config = get_service_config(repo_url)
+        if not service_config:
+            logger.info(f"[{request_id}] 未找到仓库的配置: {repo_url}。忽略。")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "ignored",
+                    "message": f"未找到仓库 {repo_url} 的扫描配置",
+                    "available_repos": list(get_service_config.__globals__.get('SERVICE_CONFIG', {}).keys())
+                }
+            )
+
+        # 模拟将扫描任务发送到 Celery（实际上不发送，只是返回成功）
+        fake_task_id = f"task_{request_id}"
+
+        logger.info(f"[{request_id}] 模拟 JaCoCo 扫描任务: {fake_task_id} 用于 {service_config['service_name']}")
+
+        # 返回成功响应
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "accepted",
+                "task_id": fake_task_id,
+                "request_id": request_id,
+                "event_type": event_type,
+                "message": f"服务 {service_config['service_name']} 的提交 {commit_id[:8]} 的 JaCoCo 扫描任务已成功排队（模拟）",
+                "extracted_info": {
+                    "repo_url": repo_url,
+                    "commit_id": commit_id,
+                    "branch_name": branch_name,
+                    "service_name": service_config['service_name']
+                }
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[{request_id}] 处理 webhook 时出现意外错误: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"内部服务器错误: {str(e)}"
+        )

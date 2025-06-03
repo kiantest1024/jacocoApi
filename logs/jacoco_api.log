@@ -157,3 +157,54 @@ Traceback (most recent call last):
     raise ConnectionError(str(exc)) from exc
 kombu.exceptions.OperationalError: Error 10061 connecting to localhost:6379. 由于目标计算机积极拒绝，无法连接。.
 2025-06-02 17:27:40,153 - uvicorn.access - INFO - 127.0.0.1:30275 - "POST /github/webhook HTTP/1.1" 500
+2025-06-03 10:38:35,554 - github_webhook - INFO - [github_1748918315_unknown] 收到 GitHub webhook: None
+2025-06-03 10:38:35,555 - github_webhook - WARNING - [github_1748918315_unknown] GitHub webhook 签名验证失败
+2025-06-03 10:38:35,557 - uvicorn.access - INFO - 127.0.0.1:59245 - "POST /github/webhook HTTP/1.1" 401
+2025-06-03 10:38:37,595 - github_webhook - INFO - [github_1748918317_unknown] 收到 GitHub webhook: None
+2025-06-03 10:38:37,596 - github_webhook - WARNING - [github_1748918317_unknown] GitHub webhook 签名验证失败
+2025-06-03 10:38:37,596 - uvicorn.access - INFO - 127.0.0.1:59247 - "POST /github/webhook HTTP/1.1" 401
+2025-06-03 10:39:41,214 - github_webhook - INFO - [github_1748918381_unknown] 收到 GitHub webhook: None
+2025-06-03 10:39:41,214 - github_webhook - WARNING - [github_1748918381_unknown] GitHub webhook 签名验证失败
+2025-06-03 10:39:41,214 - uvicorn.access - INFO - 127.0.0.1:59318 - "POST /github/webhook HTTP/1.1" 401
+2025-06-03 10:39:43,279 - github_webhook - INFO - [github_1748918383_unknown] 收到 GitHub webhook: None
+2025-06-03 10:39:43,279 - github_webhook - WARNING - [github_1748918383_unknown] GitHub webhook 签名验证失败
+2025-06-03 10:39:43,279 - uvicorn.access - INFO - 127.0.0.1:59320 - "POST /github/webhook HTTP/1.1" 401
+2025-06-03 10:40:26,790 - uvicorn.access - INFO - 127.0.0.1:59373 - "GET /health HTTP/1.1" 200
+2025-06-03 10:40:28,855 - github_webhook - INFO - [github_1748918428_unknown] 收到 GitHub webhook: None
+2025-06-03 10:40:28,856 - github_webhook - WARNING - [github_1748918428_unknown] GitHub webhook 签名验证失败
+2025-06-03 10:40:28,856 - uvicorn.access - INFO - 127.0.0.1:59378 - "POST /github/webhook HTTP/1.1" 401
+2025-06-03 10:40:58,627 - uvicorn.access - INFO - 127.0.0.1:59409 - "GET /health HTTP/1.1" 200
+2025-06-03 10:41:22,282 - github_webhook - INFO - [github_1748918482_unknown] 收到 GitHub webhook: ping
+2025-06-03 10:41:22,283 - github_webhook - WARNING - [github_1748918482_unknown] GitHub webhook 签名验证失败
+2025-06-03 10:41:22,283 - uvicorn.access - INFO - 127.0.0.1:59461 - "POST /github/webhook HTTP/1.1" 401
+2025-06-03 10:41:24,326 - github_webhook - INFO - [github_1748918484_unknown] 收到 GitHub webhook: push
+2025-06-03 10:41:24,327 - github_webhook - WARNING - [github_1748918484_unknown] GitHub webhook 签名验证失败
+2025-06-03 10:41:24,327 - uvicorn.access - INFO - 127.0.0.1:59466 - "POST /github/webhook HTTP/1.1" 401
+2025-06-03 10:46:35,101 - uvicorn.access - INFO - 127.0.0.1:59810 - "GET /health HTTP/1.1" 200
+2025-06-03 10:46:37,148 - uvicorn.access - INFO - 127.0.0.1:59813 - "GET /health HTTP/1.1" 200
+2025-06-03 10:46:39,208 - uvicorn.access - INFO - 127.0.0.1:59816 - "GET /docs HTTP/1.1" 200
+2025-06-03 10:46:41,297 - uvicorn.access - INFO - 127.0.0.1:59821 - "GET /openapi.json HTTP/1.1" 200
+2025-06-03 10:46:43,347 - uvicorn.access - INFO - 127.0.0.1:59824 - "GET /github/test HTTP/1.1" 200
+2025-06-03 10:46:45,392 - github_webhook - INFO - [github_1748918805_unknown] 收到 GitHub webhook: None
+2025-06-03 10:46:45,393 - github_webhook - WARNING - [github_1748918805_unknown] GitHub webhook 签名验证失败
+2025-06-03 10:46:45,393 - uvicorn.access - INFO - 127.0.0.1:59827 - "POST /github/webhook HTTP/1.1" 401
+2025-06-03 10:46:47,456 - github_webhook - INFO - [github_1748918807_unknown] 收到 GitHub webhook: None
+2025-06-03 10:46:47,456 - github_webhook - WARNING - [github_1748918807_unknown] GitHub webhook 签名验证失败
+2025-06-03 10:46:47,457 - uvicorn.access - INFO - 127.0.0.1:59830 - "POST /github/webhook HTTP/1.1" 401
+2025-06-03 10:46:49,503 - uvicorn.access - INFO - 127.0.0.1:59836 - "POST /webhook HTTP/1.1" 404
+2025-06-03 10:46:51,565 - uvicorn.access - INFO - 127.0.0.1:59841 - "POST /scan-trigger HTTP/1.1" 404
+2025-06-03 10:46:53,612 - uvicorn.access - INFO - 127.0.0.1:59843 - "POST /api/webhook HTTP/1.1" 404
+2025-06-03 10:47:20,392 - uvicorn.access - INFO - 127.0.0.1:59887 - "GET /health HTTP/1.1" 200
+2025-06-03 10:47:22,457 - uvicorn.access - INFO - 127.0.0.1:59890 - "GET /health HTTP/1.1" 200
+2025-06-03 10:47:24,502 - uvicorn.access - INFO - 127.0.0.1:59894 - "GET /docs HTTP/1.1" 200
+2025-06-03 10:47:26,561 - uvicorn.access - INFO - 127.0.0.1:59907 - "GET /openapi.json HTTP/1.1" 200
+2025-06-03 10:47:28,608 - uvicorn.access - INFO - 127.0.0.1:59913 - "GET /github/test HTTP/1.1" 200
+2025-06-03 10:47:30,668 - github_webhook - INFO - [github_1748918850_unknown] 收到 GitHub webhook: None
+2025-06-03 10:47:30,669 - github_webhook - WARNING - [github_1748918850_unknown] GitHub webhook 签名验证失败
+2025-06-03 10:47:30,669 - uvicorn.access - INFO - 127.0.0.1:59922 - "POST /github/webhook HTTP/1.1" 401
+2025-06-03 10:47:32,720 - github_webhook - INFO - [github_1748918852_unknown] 收到 GitHub webhook: None
+2025-06-03 10:47:32,720 - github_webhook - WARNING - [github_1748918852_unknown] GitHub webhook 签名验证失败
+2025-06-03 10:47:32,720 - uvicorn.access - INFO - 127.0.0.1:59928 - "POST /github/webhook HTTP/1.1" 401
+2025-06-03 10:47:34,763 - uvicorn.access - INFO - 127.0.0.1:59933 - "POST /webhook HTTP/1.1" 404
+2025-06-03 10:47:36,821 - uvicorn.access - INFO - 127.0.0.1:59939 - "POST /scan-trigger HTTP/1.1" 404
+2025-06-03 10:47:38,867 - uvicorn.access - INFO - 127.0.0.1:59945 - "POST /api/webhook HTTP/1.1" 404

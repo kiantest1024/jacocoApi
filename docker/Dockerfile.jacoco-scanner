@@ -1,7 +1,7 @@
 # JaCoCo 扫描器 Docker 镜像
 # 用于在隔离环境中执行 Java 项目的 JaCoCo 覆盖率扫描
 
-FROM maven:3.9.4-openjdk-11-slim
+FROM maven:3.8.6-openjdk-11-slim
 
 # 设置工作目录
 WORKDIR /app

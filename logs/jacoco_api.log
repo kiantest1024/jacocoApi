@@ -208,3 +208,23 @@ kombu.exceptions.OperationalError: Error 10061 connecting to localhost:6379. ”…”
 2025-06-03 10:47:34,763 - uvicorn.access - INFO - 127.0.0.1:59933 - "POST /webhook HTTP/1.1" 404
 2025-06-03 10:47:36,821 - uvicorn.access - INFO - 127.0.0.1:59939 - "POST /scan-trigger HTTP/1.1" 404
 2025-06-03 10:47:38,867 - uvicorn.access - INFO - 127.0.0.1:59945 - "POST /api/webhook HTTP/1.1" 404
+2025-06-03 10:48:39,516 - uvicorn.access - INFO - 127.0.0.1:10076 - "POST /github/webhook-no-auth HTTP/1.1" 404
+2025-06-03 11:02:17,149 - github_webhook - INFO - [noauth_1748919737_1758676329888]  ’µΩŒﬁ»œ÷§ webhook «Î«Û
+2025-06-03 11:02:17,152 - github_webhook - INFO - [noauth_1748919737_1758676329888]  ’µΩ∏∫‘ÿ: {
+  "object_kind": "push",
+  "ref": "refs/heads/develop",
+  "user_name": "Kian",
+  "project": {
+    "name": "jacocoTest"
+  },
+  "commits": [
+    {
+      "id": "abc123def456",
+      "message": "Fix login bug"
+    }
+  ]
+}
+2025-06-03 11:02:17,152 - github_webhook - WARNING - GitLab payload ÷–Œ¥’“µΩÕÍ’˚≤÷ø‚ URL£¨ π”√ππ‘Ïµƒ URL: https://gitlab.com/user/jacocoTest.git
+2025-06-03 11:02:17,153 - github_webhook - INFO - [noauth_1748919737_1758676329888] Ω‚ŒˆΩ·π˚: repo_url=https://gitlab.com/user/jacocoTest.git, commit_id=abc123def456, branch_name=develop, event_type=push
+2025-06-03 11:02:17,153 - github_webhook - INFO - [noauth_1748919737_1758676329888] ƒ£ƒ‚ JaCoCo …®√Ë»ŒŒÒ: task_noauth_1748919737_1758676329888 ”√”⁄ jacocoTest
+2025-06-03 11:02:17,154 - uvicorn.access - INFO - 127.0.0.1:10931 - "POST /github/webhook-no-auth HTTP/1.1" 200

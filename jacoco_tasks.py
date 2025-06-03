@@ -132,16 +132,26 @@ def run_jacoco_scan_docker(
     返回:
         扫描结果字典
     """
-    logger.info(f"[{request_id}] 开始 Docker 扫描")
+    logger.info(f"[{request_id}] 开始 Docker JaCoCo 扫描")
+    logger.info(f"[{request_id}] 仓库: {repo_url}")
+    logger.info(f"[{request_id}] 提交: {commit_id}")
+    logger.info(f"[{request_id}] 分支: {branch_name}")
 
     # Docker 镜像名称
     docker_image = service_config.get('docker_image', 'jacoco-scanner:latest')
+    logger.info(f"[{request_id}] 使用 Docker 镜像: {docker_image}")
+
+    # 确保报告目录存在
+    os.makedirs(reports_dir, exist_ok=True)
+    abs_reports_dir = os.path.abspath(reports_dir)
+    logger.info(f"[{request_id}] 报告目录: {abs_reports_dir}")
 
     # 构建 Docker 运行命令
     docker_cmd = [
         'docker', 'run', '--rm',
-        '-v', f'{reports_dir}:/app/reports',
+        '-v', f'{abs_reports_dir}:/app/reports',
         docker_image,
+        '/app/scripts/scan.sh',
         '--repo-url', repo_url,
         '--commit-id', commit_id,
         '--branch', branch_name
@@ -155,27 +165,68 @@ def run_jacoco_scan_docker(
             docker_cmd,
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             timeout=1800  # 30分钟超时
         )
 
+        logger.info(f"[{request_id}] Docker 容器退出，返回码: {result.returncode}")
+        logger.info(f"[{request_id}] Docker 标准输出: {result.stdout}")
+
+        if result.stderr:
+            logger.warning(f"[{request_id}] Docker 标准错误: {result.stderr}")
+
         if result.returncode == 0:
             logger.info(f"[{request_id}] Docker 扫描成功完成")
-            logger.debug(f"[{request_id}] Docker 输出: {result.stdout}")
 
-            return {
-                "status": "success",
-                "docker_output": result.stdout,
-                "scan_method": "docker"
-            }
+            # 检查报告文件是否生成
+            report_files = []
+            if os.path.exists(abs_reports_dir):
+                for root, dirs, files in os.walk(abs_reports_dir):
+                    for file in files:
+                        if file.endswith(('.xml', '.html', '.json')):
+                            report_files.append(os.path.join(root, file))
+
+            logger.info(f"[{request_id}] 找到报告文件: {report_files}")
+
+            # 解析生成的报告
+            if report_files:
+                try:
+                    parsed_reports = parse_jacoco_reports(abs_reports_dir, request_id)
+                    return {
+                        "status": "success",
+                        "docker_output": result.stdout,
+                        "scan_method": "docker",
+                        "reports_dir": abs_reports_dir,
+                        **parsed_reports
+                    }
+                except Exception as e:
+                    logger.warning(f"[{request_id}] 解析报告失败: {str(e)}")
+                    return {
+                        "status": "success",
+                        "docker_output": result.stdout,
+                        "scan_method": "docker",
+                        "reports_dir": abs_reports_dir,
+                        "report_files": report_files,
+                        "parse_error": str(e)
+                    }
+            else:
+                logger.warning(f"[{request_id}] 未找到 JaCoCo 报告文件")
+                return {
+                    "status": "success",
+                    "docker_output": result.stdout,
+                    "scan_method": "docker",
+                    "reports_dir": abs_reports_dir,
+                    "warning": "未找到 JaCoCo 报告文件"
+                }
         else:
             logger.error(f"[{request_id}] Docker 扫描失败")
-            logger.error(f"[{request_id}] Docker 错误: {result.stderr}")
-
             return {
                 "status": "failed",
                 "error": result.stderr,
                 "docker_output": result.stdout,
-                "scan_method": "docker"
+                "scan_method": "docker",
+                "return_code": result.returncode
             }
 
     except subprocess.TimeoutExpired:

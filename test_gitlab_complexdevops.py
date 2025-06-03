@@ -13,7 +13,7 @@ def test_gitlab_webhook():
     
     url = "http://localhost:8001/github/webhook-no-auth"
     
-    # GitLab ComplexDevOps webhook payload
+    # GitLab ComplexDevOps webhook payload (完整格式)
     payload = {
         "object_kind": "push",
         "ref": "refs/heads/main",
@@ -36,6 +36,18 @@ def test_gitlab_webhook():
         "before": "000000000000",
         "checkout_sha": "main"
     }
+
+    # 也测试简化格式（你当前使用的格式）
+    simple_payload = {
+        "object_kind": "push",
+        "ref": "refs/heads/develop",
+        "user_name": "Kian",
+        "project": {"name": "jacocoTest"},
+        "commits": [{
+            "id": "abc123def456",
+            "message": "Fix login bug"
+        }]
+    }
     
     headers = {
         "Content-Type": "application/json",
@@ -45,11 +57,36 @@ def test_gitlab_webhook():
     print("=== 测试 GitLab ComplexDevOps Webhook ===\n")
     print(f"URL: {url}")
     print(f"仓库: https://gitlab.complexdevops.com/kian/jacocoTest.git")
-    print(f"分支: main")
     print()
-    
+
+    # 首先测试简化格式（你当前使用的格式）
+    print("🧪 测试简化格式的 payload...")
     try:
-        print("发送 webhook 请求...")
+        print("发送简化 webhook 请求...")
+        response = requests.post(url, json=simple_payload, headers=headers, timeout=10)
+        print(f"状态码: {response.status_code}")
+
+        if response.status_code == 200:
+            result = response.json()
+            print("✅ 简化格式 Webhook 接收成功!")
+            print(f"📝 响应: {json.dumps(result, indent=2, ensure_ascii=False)}")
+
+            if result.get('status') == 'accepted':
+                print(f"\n🎯 简化格式测试成功，任务已排队: {result.get('task_id')}")
+            else:
+                print(f"\n⚠️ 简化格式被忽略: {result.get('message')}")
+        else:
+            print("❌ 简化格式 Webhook 请求失败")
+            print(f"错误: {response.text}")
+    except Exception as e:
+        print(f"❌ 简化格式测试异常: {str(e)}")
+
+    print("\n" + "="*50 + "\n")
+
+    # 然后测试完整格式
+    print("🧪 测试完整格式的 payload...")
+    try:
+        print("发送完整 webhook 请求...")
         response = requests.post(url, json=payload, headers=headers, timeout=10)
         print(f"状态码: {response.status_code}")
         

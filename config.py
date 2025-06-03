@@ -12,15 +12,19 @@ class Settings(BaseSettings):
     DEBUG: bool = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
     
     GIT_WEBHOOK_SECRET: str = os.getenv("GIT_WEBHOOK_SECRET", "your_default_secret_token")
-    
+
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
     REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
-    
+
+    RATE_LIMIT_ENABLED: bool = os.getenv("RATE_LIMIT_ENABLED", "True").lower() in ("true", "1", "t")
+    RATE_LIMIT_REQUESTS: int = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
+    RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))
+
     @property
     def REDIS_URL(self) -> str:
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
-    
+
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     SCAN_TIMEOUT: int = int(os.getenv("SCAN_TIMEOUT", "1800"))
     

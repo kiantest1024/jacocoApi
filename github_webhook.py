@@ -13,7 +13,7 @@ from fastapi import APIRouter, Request, HTTPException, Header, status
 from fastapi.responses import JSONResponse
 
 from config import settings, get_service_config
-from tasks import celery_app
+from jacoco_tasks import celery_app
 from security import verify_ip_whitelist
 
 # 设置日志记录器

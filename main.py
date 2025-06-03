@@ -3,12 +3,10 @@ JaCoCo 扫描触发 API 的主 FastAPI 应用程序。
 此模块包含 FastAPI 应用程序和 webhook 接收器的路由。
 """
 
-import json
 import logging
 import time
-from typing import Dict, Any, Optional, List, Callable
 
-from fastapi import FastAPI, Request, HTTPException, Header, Depends, status
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -16,11 +14,9 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST, CollectorRegistry
 
-from config import settings, get_service_config
-from tasks import celery_app
-from validators import WebhookValidator
-from git_providers import GitProviderParser
-from security import verify_api_key, verify_ip_whitelist, rate_limiter, create_security_middleware
+from config import settings
+from jacoco_tasks import celery_app
+from security import verify_api_key, rate_limiter, create_security_middleware
 from logging_config import setup_logging
 from api_endpoints import router as api_router
 from github_webhook import router as github_router
@@ -185,113 +181,12 @@ async def get_task_status(task_id: str):
         logger.error(f"检索任务状态时出错: {str(e)}")
         raise HTTPException(status_code=500, detail=f"检索任务状态时出错: {str(e)}")
 
-# Webhook 端点
-@app.post("/scan-trigger", dependencies=[rate_limit()] if settings.RATE_LIMIT_ENABLED else [])
-async def handle_scan_trigger(
-    request: Request,
-    is_valid: bool = Depends(WebhookValidator.validate_webhook)
-):
-    """
-    处理来自 Git 提供商的 webhook 请求，以触发代码覆盖率扫描。
-
-    此端点接收来自 Git 提供商（GitHub、GitLab、Gitee）的 webhook 负载，
-    验证它们，提取仓库信息，并将扫描任务排队。
-
-    参数:
-        request: FastAPI 请求对象
-        is_valid: webhook 验证依赖的结果
-
-    返回:
-        带有任务状态的 JSON 响应
-    """
-    request_id = f"req_{int(time.time())}_{id(request)}"
-    logger.info(f"[{request_id}] 正在处理 webhook 请求")
-
-    try:
-        # 将请求体解析为 JSON
-        body = await request.body()
-        payload = json.loads(body)
-
-        # 使用提供商解析器提取仓库信息
-        provider_name, repo_url, commit_id, branch_name = GitProviderParser.parse_payload(payload)
-
-        # 记录 Prometheus 指标 - 提供商
-        if provider_name:
-            WEBHOOK_COUNTER.labels(provider=provider_name, status="received").inc()
-        else:
-            WEBHOOK_COUNTER.labels(provider="unknown", status="received").inc()
-
-        # 处理分支删除事件（已在 GitHubParser 中过滤）
-        if provider_name and not repo_url:
-            logger.info(f"[{request_id}] 忽略分支删除或不支持的事件")
-            WEBHOOK_COUNTER.labels(provider=provider_name, status="ignored").inc()
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "status": "ignored",
-                    "message": "忽略分支删除或不支持的事件"
-                }
-            )
-
-        # 验证提取的信息
-        if not repo_url or not commit_id or not branch_name:
-            logger.error(f"[{request_id}] 无法从负载中提取所需信息: {list(payload.keys())}")
-            WEBHOOK_COUNTER.labels(provider=provider_name or "unknown", status="error").inc()
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "status": "error",
-                    "message": "无法解析 webhook 负载，缺少仓库、提交或分支信息"
-                }
-            )
-
-        # 查找服务配置
-        service_config = get_service_config(repo_url)
-        if not service_config:
-            logger.info(f"[{request_id}] 未找到仓库的配置: {repo_url}。忽略。")
-            WEBHOOK_COUNTER.labels(provider=provider_name, status="ignored").inc()
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "status": "ignored",
-                    "message": f"未找到仓库 {repo_url} 的扫描配置"
-                }
-            )
-
-        # 将扫描任务发送到 Celery
-        task = celery_app.send_task(
-            'scan_tasks.execute_scan',
-            args=[repo_url, commit_id, branch_name, service_config],
-            kwargs={"request_id": request_id}
-        )
-
-        logger.info(f"[{request_id}] 扫描任务已排队: {task.id} 用于 {service_config['service_name']}")
-        WEBHOOK_COUNTER.labels(provider=provider_name, status="success").inc()
-
-        # 返回成功响应
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "accepted",
-                "task_id": task.id,
-                "request_id": request_id,
-                "message": f"服务 {service_config['service_name']} 的提交 {commit_id[:8]} 的扫描任务已成功排队"
-            }
-        )
-
-    except json.JSONDecodeError:
-        logger.error(f"[{request_id}] 无法解码 JSON 负载")
-        WEBHOOK_COUNTER.labels(provider="unknown", status="error").inc()
-        raise HTTPException(status_code=400, detail="无效的 JSON 负载")
-
-    except Exception as e:
-        logger.error(f"[{request_id}] 处理 webhook 时出现意外错误: {str(e)}", exc_info=True)
-        WEBHOOK_COUNTER.labels(provider="unknown", status="error").inc()
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+# 注意: 旧的 /scan-trigger 端点已被 GitHub webhook 端点替代
+# 请使用 /github/webhook 端点来接收 GitHub webhook 事件
 
 # HTTP 异常的错误处理程序
 @app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
+async def http_exception_handler(_: Request, exc: HTTPException):
     """HTTP 异常的自定义异常处理程序。"""
     return JSONResponse(
         status_code=exc.status_code,
@@ -300,7 +195,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 # 通用错误处理程序
 @app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception):
+async def generic_exception_handler(_: Request, exc: Exception):
     """所有其他异常的通用异常处理程序。"""
     logger.error(f"未处理的异常: {str(exc)}", exc_info=True)
     return JSONResponse(

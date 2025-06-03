@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from config import get_service_config
-from tasks import celery_app
+from jacoco_tasks import celery_app
 from security import verify_api_key
 
 # 创建路由器

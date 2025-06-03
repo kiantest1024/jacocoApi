@@ -32,12 +32,24 @@
 - **动态配置**: 使用外部 Maven 配置文件注入 JaCoCo 插件
 - **多格式报告**: 生成 XML、HTML、JSON 格式的覆盖率报告
 
-### 3. 异步任务处理
+### 3. 增量更新机制
+- **首次克隆**: 第一次扫描时完整克隆仓库
+- **增量更新**: 后续扫描使用 `git pull` 获取最新代码
+- **持久化存储**: 本地保存仓库副本，提高扫描效率
+- **智能切换**: 自动处理分支切换和提交检出
+
+### 4. 飞书机器人通知
+- **实时通知**: 扫描完成后自动发送覆盖率报告到飞书群聊
+- **富文本消息**: 支持卡片式消息，包含覆盖率图表和详细数据
+- **错误通知**: 扫描失败时发送错误信息到飞书
+- **可配置**: 支持为不同项目配置不同的飞书机器人
+
+### 5. 异步任务处理
 - **Celery 队列**: 使用 Celery 进行异步任务处理
 - **Redis 支持**: 基于 Redis 的任务队列和结果存储
 - **任务跟踪**: 提供任务 ID 用于跟踪扫描进度
 
-### 4. RESTful API
+### 6. RESTful API
 - **标准接口**: 提供标准的 REST API 接口
 - **文档完整**: 内置 Swagger UI 和 ReDoc 文档
 - **易于集成**: 可轻松集成到现有的 CI/CD 系统中
@@ -164,12 +176,18 @@ REDIS_PORT=6379
 
 ```python
 SERVICE_CONFIG = {
-    "https://github.com/your-username/your-repo.git": {
-        "service_name": "your-service",
+    "https://gitlab.complexdevops.com/kian/jacocoTest.git": {
+        "service_name": "jacocoTest",
         "scan_method": "jacoco",
+        "project_type": "maven",
         "docker_image": "jacoco-scanner:latest",
+        "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/57031f94-2e1a-473c-8efc-f371b648dfbe",
+        "coverage_threshold": 50.0,
+        "maven_goals": ["clean", "test", "jacoco:report"],
+        "report_formats": ["xml", "html", "json"],
         "use_docker": True,
-        # ...
+        "use_incremental_update": True,  # 启用增量更新
+        "local_repo_path": "./repos/jacocoTest",  # 本地仓库路径
     }
 }
 ```

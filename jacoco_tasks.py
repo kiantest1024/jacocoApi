@@ -16,6 +16,7 @@ from celery import Celery
 from celery.signals import task_failure, task_success
 
 from config import settings, CELERY_BROKER_URL, CELERY_RESULT_BACKEND
+from feishu_notification import send_jacoco_notification, send_error_notification
 
 # 设置日志记录器
 logger = logging.getLogger(__name__)
@@ -146,10 +147,16 @@ def run_jacoco_scan_docker(
     abs_reports_dir = os.path.abspath(reports_dir)
     logger.info(f"[{request_id}] 报告目录: {abs_reports_dir}")
 
-    # 构建 Docker 运行命令
+    # 创建持久化仓库目录（支持增量更新）
+    repos_base_dir = "./repos"
+    os.makedirs(repos_base_dir, exist_ok=True)
+    abs_repos_dir = os.path.abspath(repos_base_dir)
+
+    # 构建 Docker 运行命令（挂载仓库目录以支持增量更新）
     docker_cmd = [
         'docker', 'run', '--rm',
         '-v', f'{abs_reports_dir}:/app/reports',
+        '-v', f'{abs_repos_dir}:/app/repos',
         docker_image,
         '/app/scripts/scan.sh',
         '--repo-url', repo_url,
@@ -193,13 +200,31 @@ def run_jacoco_scan_docker(
             if report_files:
                 try:
                     parsed_reports = parse_jacoco_reports(abs_reports_dir, request_id)
-                    return {
+                    scan_result = {
                         "status": "success",
                         "docker_output": result.stdout,
                         "scan_method": "docker",
                         "reports_dir": abs_reports_dir,
                         **parsed_reports
                     }
+
+                    # 发送飞书通知
+                    webhook_url = service_config.get('notification_webhook')
+                    if webhook_url and 'coverage_summary' in parsed_reports:
+                        try:
+                            send_jacoco_notification(
+                                webhook_url=webhook_url,
+                                repo_url=repo_url,
+                                branch_name=branch_name,
+                                commit_id=commit_id,
+                                coverage_data=parsed_reports['coverage_summary'],
+                                scan_result=scan_result,
+                                request_id=request_id
+                            )
+                        except Exception as e:
+                            logger.warning(f"[{request_id}] 发送飞书通知失败: {str(e)}")
+
+                    return scan_result
                 except Exception as e:
                     logger.warning(f"[{request_id}] 解析报告失败: {str(e)}")
                     return {
@@ -221,13 +246,30 @@ def run_jacoco_scan_docker(
                 }
         else:
             logger.error(f"[{request_id}] Docker 扫描失败")
-            return {
+            error_result = {
                 "status": "failed",
                 "error": result.stderr,
                 "docker_output": result.stdout,
                 "scan_method": "docker",
                 "return_code": result.returncode
             }
+
+            # 发送错误通知到飞书
+            webhook_url = service_config.get('notification_webhook')
+            if webhook_url:
+                try:
+                    send_error_notification(
+                        webhook_url=webhook_url,
+                        repo_url=repo_url,
+                        branch_name=branch_name,
+                        commit_id=commit_id,
+                        error_message=result.stderr or "Docker 扫描失败",
+                        request_id=request_id
+                    )
+                except Exception as e:
+                    logger.warning(f"[{request_id}] 发送飞书错误通知失败: {str(e)}")
+
+            return error_result
 
     except subprocess.TimeoutExpired:
         logger.error(f"[{request_id}] Docker 扫描超时")

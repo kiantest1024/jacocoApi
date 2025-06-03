@@ -131,16 +131,18 @@ SERVICE_CONFIG: Dict[str, Dict[str, Any]] = {
         "use_docker": True,
     },
     # GitLab 测试项目配置
-    "https://gitlab.com/user/jacocoTest.git": {
+    "https://gitlab.complexdevops.com/kian/jacocoTest.git": {
         "service_name": "jacocoTest",
         "scan_method": "jacoco",
         "project_type": "maven",
         "docker_image": "jacoco-scanner:latest",
-        "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/08ce42ce-4136-476d-8aef-8517e0f5a616",
+        "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/57031f94-2e1a-473c-8efc-f371b648dfbe",
         "coverage_threshold": 50.0,
         "maven_goals": ["clean", "test", "jacoco:report"],
-        "report_formats": ["xml", "html"],
+        "report_formats": ["xml", "html", "json"],
         "use_docker": True,
+        "use_incremental_update": True,  # 启用增量更新
+        "local_repo_path": "./repos/jacocoTest",  # 本地仓库路径
     }
     # 根据需要添加更多仓库配置
 }

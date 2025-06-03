@@ -9,7 +9,7 @@ set -e
 REPO_URL=""
 COMMIT_ID=""
 BRANCH_NAME="main"
-PROJECT_PATH="/app/workspace/project"
+PROJECT_PATH="/app/repos/jacocoTest"
 REPORTS_PATH="/app/reports"
 CONFIG_PATH="/app/configs"
 
@@ -64,24 +64,57 @@ echo "项目路径: $PROJECT_PATH"
 echo "报告路径: $REPORTS_PATH"
 echo "=========================================="
 
-# 清理工作目录
-echo "清理工作目录..."
-rm -rf "$PROJECT_PATH"
-mkdir -p "$PROJECT_PATH"
+# 创建必要的目录
 mkdir -p "$REPORTS_PATH"
 
-# 克隆仓库
-echo "克隆仓库: $REPO_URL"
-if ! git clone --depth 1 --branch "$BRANCH_NAME" "$REPO_URL" "$PROJECT_PATH"; then
-    echo "错误: 克隆仓库失败"
-    exit 1
-fi
+# 检查是否已存在本地仓库（支持增量更新）
+if [[ -d "$PROJECT_PATH/.git" ]]; then
+    echo "发现已存在的仓库，使用增量更新..."
+    cd "$PROJECT_PATH"
 
-# 切换到指定提交
-echo "切换到提交: $COMMIT_ID"
-cd "$PROJECT_PATH"
-if ! git checkout "$COMMIT_ID"; then
-    echo "警告: 无法切换到指定提交，使用当前分支"
+    # 获取最新的远程信息
+    echo "获取远程更新..."
+    if ! git fetch origin; then
+        echo "警告: 获取远程更新失败，尝试重新克隆..."
+        cd /app
+        rm -rf "$PROJECT_PATH"
+        mkdir -p "$PROJECT_PATH"
+        if ! git clone "$REPO_URL" "$PROJECT_PATH"; then
+            echo "错误: 克隆仓库失败"
+            exit 1
+        fi
+        cd "$PROJECT_PATH"
+    fi
+
+    # 切换到指定的提交或分支
+    echo "切换到提交/分支: $COMMIT_ID"
+    if ! git checkout "$COMMIT_ID"; then
+        echo "错误: 切换到提交 $COMMIT_ID 失败"
+        exit 1
+    fi
+
+    # 如果是分支，拉取最新代码
+    if git show-ref --verify --quiet refs/heads/"$COMMIT_ID" 2>/dev/null || git show-ref --verify --quiet refs/remotes/origin/"$COMMIT_ID" 2>/dev/null; then
+        echo "拉取分支 $COMMIT_ID 的最新代码..."
+        if ! git pull origin "$COMMIT_ID"; then
+            echo "警告: 拉取最新代码失败，使用当前代码"
+        fi
+    fi
+else
+    echo "首次克隆仓库: $REPO_URL"
+    mkdir -p "$PROJECT_PATH"
+    if ! git clone "$REPO_URL" "$PROJECT_PATH"; then
+        echo "错误: 克隆仓库失败"
+        exit 1
+    fi
+
+    cd "$PROJECT_PATH"
+
+    # 切换到指定的提交或分支
+    echo "切换到提交/分支: $COMMIT_ID"
+    if ! git checkout "$COMMIT_ID"; then
+        echo "警告: 无法切换到指定提交，使用当前分支"
+    fi
 fi
 
 # 检查是否为 Maven 项目

@@ -10,7 +10,6 @@ import tempfile
 import shutil
 import json
 import xml.etree.ElementTree as ET
-import docker
 from typing import Dict, Any, Optional
 from pathlib import Path
 from celery import Celery
@@ -21,15 +20,12 @@ from config import settings, CELERY_BROKER_URL, CELERY_RESULT_BACKEND
 # 设置日志记录器
 logger = logging.getLogger(__name__)
 
-# 初始化 Celery 应用（如果还没有）
-try:
-    from tasks import celery_app
-except ImportError:
-    celery_app = Celery(
-        'jacoco_tasks',
-        broker=CELERY_BROKER_URL,
-        backend=CELERY_RESULT_BACKEND
-    )
+# 初始化 Celery 应用
+celery_app = Celery(
+    'jacoco_tasks',
+    broker=CELERY_BROKER_URL,
+    backend=CELERY_RESULT_BACKEND
+)
 
 
 @celery_app.task(name='scan_tasks.execute_jacoco_scan', bind=True, max_retries=3)

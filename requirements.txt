@@ -12,14 +12,11 @@ pytest==7.4.3
 pytest-asyncio==0.21.1
 pytest-cov==4.1.0
 httpx==0.25.1
-docker==7.0.0
+docker==7.1.0
 pydantic-settings==2.1.0
 
-# Docker 和容器化支持
-docker-py==1.10.6
+# 修复 Python 3.12+ 兼容性问题
+setuptools>=65.0.0
 
 # XML 处理
 lxml==4.9.3
-
-# 额外的工具
-pathlib2==2.3.7

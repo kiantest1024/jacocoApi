@@ -58,105 +58,210 @@ def verify_github_signature(payload_body: bytes, signature_header: str, secret: 
         return False
 
 
-def parse_github_payload(payload: Dict[str, Any]) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+def parse_webhook_payload(payload: Dict[str, Any]) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
     """
-    解析 GitHub webhook 负载。
-    
+    解析 Git webhook 负载（支持 GitHub 和 GitLab）。
+
     参数:
-        payload: GitHub webhook 负载
-        
+        payload: Git webhook 负载
+
     返回:
         (repo_url, commit_id, branch_name, event_type) 的元组
     """
     try:
-        # 检查事件类型
+        # 检查是否为 GitHub ping 事件
         if 'zen' in payload:
-            # ping 事件
             return None, None, None, 'ping'
-        
+
+        # 检查是否为 GitLab webhook
+        if 'object_kind' in payload:
+            return parse_gitlab_payload(payload)
+
+        # 否则按 GitHub 格式解析
+        return parse_github_payload(payload)
+
+    except Exception as e:
+        logger.error(f"解析 webhook payload 时出错: {str(e)}")
+        return None, None, None, None
+
+
+def parse_gitlab_payload(payload: Dict[str, Any]) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """
+    解析 GitLab webhook 负载。
+
+    参数:
+        payload: GitLab webhook 负载
+
+    返回:
+        (repo_url, commit_id, branch_name, event_type) 的元组
+    """
+    try:
+        object_kind = payload.get('object_kind')
+
+        if object_kind == 'push':
+            # 获取仓库信息
+            project = payload.get('project', {})
+            repo_url = project.get('http_url') or project.get('ssh_url') or project.get('web_url')
+
+            # 如果没有完整 URL，构造一个
+            if not repo_url and project.get('name'):
+                # 这里需要根据实际情况构造 URL
+                repo_url = f"https://gitlab.com/user/{project['name']}.git"
+                logger.warning(f"GitLab payload 中未找到完整仓库 URL，使用构造的 URL: {repo_url}")
+
+            if not repo_url:
+                logger.warning("GitLab payload 中未找到仓库 URL")
+                return None, None, None, None
+
+            # 获取分支信息
+            ref = payload.get('ref', '')
+            if ref.startswith('refs/heads/'):
+                branch_name = ref.replace('refs/heads/', '')
+            else:
+                branch_name = ref
+
+            # 获取最新提交
+            commits = payload.get('commits', [])
+            if commits:
+                commit_id = commits[-1].get('id')
+            else:
+                commit_id = payload.get('after') or payload.get('checkout_sha')
+
+            return repo_url, commit_id, branch_name, 'push'
+
+        elif object_kind == 'merge_request':
+            # 处理 merge request 事件
+            merge_request = payload.get('object_attributes', {})
+            project = payload.get('project', {})
+
+            repo_url = project.get('http_url') or project.get('ssh_url') or project.get('web_url')
+            commit_id = merge_request.get('last_commit', {}).get('id')
+            branch_name = merge_request.get('source_branch')
+
+            return repo_url, commit_id, branch_name, 'merge_request'
+
+        else:
+            logger.warning(f"不支持的 GitLab 事件类型: {object_kind}")
+            return None, None, None, 'unsupported'
+
+    except Exception as e:
+        logger.error(f"解析 GitLab payload 时出错: {str(e)}")
+        return None, None, None, None
+
+
+def parse_github_payload(payload: Dict[str, Any]) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """
+    解析 GitHub webhook 负载。
+
+    参数:
+        payload: GitHub webhook 负载
+
+    返回:
+        (repo_url, commit_id, branch_name, event_type) 的元组
+    """
+    try:
         # 获取仓库信息
         repository = payload.get('repository', {})
         repo_url = repository.get('clone_url') or repository.get('ssh_url')
-        
+
         if not repo_url:
             logger.warning("GitHub payload 中未找到仓库 URL")
             return None, None, None, None
-        
+
         # 处理 push 事件
         if 'commits' in payload and payload.get('ref'):
             ref = payload['ref']
-            
+
             # 检查是否为分支删除
             if payload.get('deleted', False):
                 logger.info("忽略分支删除事件")
                 return None, None, None, 'branch_deleted'
-            
+
             # 提取分支名称
             if ref.startswith('refs/heads/'):
                 branch_name = ref.replace('refs/heads/', '')
             else:
                 branch_name = ref
-            
+
             # 获取最新提交
             commits = payload.get('commits', [])
             if commits:
                 commit_id = commits[-1].get('id')
             else:
                 commit_id = payload.get('after')
-            
+
             return repo_url, commit_id, branch_name, 'push'
-        
+
         # 处理 pull request 事件
         elif 'pull_request' in payload:
             pr = payload['pull_request']
             commit_id = pr['head']['sha']
             branch_name = pr['head']['ref']
-            
+
             return repo_url, commit_id, branch_name, 'pull_request'
-        
+
         else:
             logger.warning(f"不支持的 GitHub 事件类型: {list(payload.keys())}")
             return None, None, None, 'unsupported'
-            
+
     except Exception as e:
         logger.error(f"解析 GitHub payload 时出错: {str(e)}")
         return None, None, None, None
 
 
 @router.post("/webhook")
-async def github_webhook_handler(
+async def webhook_handler(
     request: Request,
     x_github_event: Optional[str] = Header(None),
     x_hub_signature_256: Optional[str] = Header(None),
-    x_github_delivery: Optional[str] = Header(None)
+    x_github_delivery: Optional[str] = Header(None),
+    x_gitlab_event: Optional[str] = Header(None),
+    x_gitlab_token: Optional[str] = Header(None)
 ):
     """
-    处理 GitHub webhook 请求。
-    
+    处理 Git webhook 请求（支持 GitHub 和 GitLab）。
+
     参数:
         request: FastAPI 请求对象
         x_github_event: GitHub 事件类型
         x_hub_signature_256: GitHub 签名
         x_github_delivery: GitHub 交付 ID
-        
+        x_gitlab_event: GitLab 事件类型
+        x_gitlab_token: GitLab 令牌
+
     返回:
         JSON 响应
     """
-    request_id = f"github_{int(time.time())}_{x_github_delivery or 'unknown'}"
-    logger.info(f"[{request_id}] 收到 GitHub webhook: {x_github_event}")
-    
+    # 检测是 GitHub 还是 GitLab webhook
+    is_gitlab = x_gitlab_event is not None or x_gitlab_token is not None
+    provider = "GitLab" if is_gitlab else "GitHub"
+    event_type = x_gitlab_event or x_github_event
+
+    request_id = f"{provider.lower()}_{int(time.time())}_{x_github_delivery or x_gitlab_token or 'unknown'}"
+    logger.info(f"[{request_id}] 收到 {provider} webhook: {event_type}")
+
     try:
         # 读取请求体
         body = await request.body()
-        
+
         # 验证签名（如果配置了密钥）
         if settings.GIT_WEBHOOK_SECRET and settings.GIT_WEBHOOK_SECRET != "your_default_secret_token":
-            if not verify_github_signature(body, x_hub_signature_256, settings.GIT_WEBHOOK_SECRET):
-                logger.warning(f"[{request_id}] GitHub webhook 签名验证失败")
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="签名验证失败"
-                )
+            if is_gitlab:
+                # GitLab 使用简单的 token 验证
+                if x_gitlab_token != settings.GIT_WEBHOOK_SECRET:
+                    logger.warning(f"[{request_id}] GitLab webhook token 验证失败")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Token 验证失败"
+                    )
+            else:
+                # GitHub 使用 HMAC 签名验证
+                if not verify_github_signature(body, x_hub_signature_256, settings.GIT_WEBHOOK_SECRET):
+                    logger.warning(f"[{request_id}] GitHub webhook 签名验证失败")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="签名验证失败"
+                    )
         
         # 解析 JSON 负载
         try:
@@ -169,18 +274,18 @@ async def github_webhook_handler(
             )
         
         # 处理 ping 事件
-        if x_github_event == 'ping':
-            logger.info(f"[{request_id}] GitHub ping 事件")
+        if event_type == 'ping' or (is_gitlab and event_type == 'Test Hook'):
+            logger.info(f"[{request_id}] {provider} ping/test 事件")
             return JSONResponse(
                 status_code=200,
                 content={
                     "status": "success",
-                    "message": "GitHub webhook ping 接收成功"
+                    "message": f"{provider} webhook ping 接收成功"
                 }
             )
         
-        # 解析负载
-        repo_url, commit_id, branch_name, event_type = parse_github_payload(payload)
+        # 解析负载（支持 GitHub 和 GitLab）
+        repo_url, commit_id, branch_name, event_type = parse_webhook_payload(payload)
         
         # 处理特殊事件类型
         if event_type in ['branch_deleted', 'unsupported']:

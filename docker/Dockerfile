@@ -1,12 +1,18 @@
 # JaCoCo Scanner Docker Image
 FROM openjdk:11-jdk-slim
 
+# 配置国内镜像源以提高下载速度
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list
+
 # 安装必要的工具
 RUN apt-get update && apt-get install -y \
     git \
     maven \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    python3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # 设置工作目录
 WORKDIR /app

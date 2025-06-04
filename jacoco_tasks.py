@@ -51,7 +51,12 @@ def run_docker_jacoco_scan(
         }
 
         webhook_url = service_config.get('notification_webhook')
-        logger.info(f"[{request_id}] 检查通知配置: webhook_url={webhook_url}")
+        logger.info(f"[{request_id}] ==================== 通知调试开始 ====================")
+        logger.info(f"[{request_id}] 检查通知配置:")
+        logger.info(f"[{request_id}]   webhook_url存在: {'✅' if webhook_url else '❌'}")
+        logger.info(f"[{request_id}]   webhook_url长度: {len(webhook_url) if webhook_url else 0}")
+        logger.info(f"[{request_id}]   webhook_url: {webhook_url}")
+        logger.info(f"[{request_id}] service_config keys: {list(service_config.keys())}")
         logger.info(f"[{request_id}] report_data keys: {list(report_data.keys())}")
         logger.info(f"[{request_id}] final_result keys: {list(final_result.keys())}")
 
@@ -80,12 +85,20 @@ def run_docker_jacoco_scan(
 
         if webhook_url:
             try:
-                logger.info(f"[{request_id}] 准备发送飞书通知...")
-                logger.info(f"[{request_id}] coverage_summary: {coverage_summary}")
+                logger.info(f"[{request_id}] ✅ 开始发送飞书通知...")
+                logger.info(f"[{request_id}] 通知参数:")
+                logger.info(f"[{request_id}]   webhook_url: {webhook_url}")
+                logger.info(f"[{request_id}]   repo_url: {repo_url}")
+                logger.info(f"[{request_id}]   branch_name: {branch_name}")
+                logger.info(f"[{request_id}]   commit_id: {commit_id}")
+                logger.info(f"[{request_id}]   coverage_summary: {coverage_summary}")
+                logger.info(f"[{request_id}]   scan_result status: {final_result.get('status', 'unknown')}")
 
                 # 导入通知函数
+                logger.info(f"[{request_id}] 导入通知函数...")
                 from feishu_notification import send_jacoco_notification
 
+                logger.info(f"[{request_id}] 调用通知函数...")
                 result = send_jacoco_notification(
                     webhook_url=webhook_url,
                     repo_url=repo_url,
@@ -95,6 +108,8 @@ def run_docker_jacoco_scan(
                     scan_result=final_result,
                     request_id=request_id
                 )
+
+                logger.info(f"[{request_id}] 通知函数返回结果: {result}")
 
                 if result:
                     logger.info(f"[{request_id}] ✅ 飞书通知发送成功")
@@ -113,6 +128,8 @@ def run_docker_jacoco_scan(
             logger.warning(f"[{request_id}] ⚠️ 跳过飞书通知: 未配置webhook_url")
             final_result["notification_skip_reason"] = "no_webhook_url"
             final_result["notification_sent"] = False
+
+        logger.info(f"[{request_id}] ==================== 通知调试结束 ====================")
 
         return final_result
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Universal JaCoCo Scanner API - 独立启动版本
+Universal JaCoCo Scanner API
+通用JaCoCo代码覆盖率扫描服务
 """
 
 import os
@@ -9,18 +10,9 @@ import time
 import json
 from typing import Dict, Any
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-
-# 配置
-class Config:
-    API_TITLE = "Universal JaCoCo Scanner API"
-    API_DESCRIPTION = "Universal JaCoCo coverage scanner for any Maven project"
-    API_VERSION = "1.0.0"
-    DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
-
-config = Config()
 
 # 日志配置
 logging.basicConfig(
@@ -31,9 +23,9 @@ logger = logging.getLogger(__name__)
 
 # FastAPI应用
 app = FastAPI(
-    title=config.API_TITLE,
-    description=config.API_DESCRIPTION,
-    version=config.API_VERSION,
+    title="Universal JaCoCo Scanner API",
+    description="通用JaCoCo代码覆盖率扫描服务，支持GitHub和GitLab webhook",
+    version="2.0.0"
 )
 
 # CORS中间件
@@ -51,21 +43,6 @@ os.makedirs(REPORTS_BASE_DIR, exist_ok=True)
 
 # 挂载静态文件服务（用于HTML报告）
 app.mount("/reports", StaticFiles(directory=REPORTS_BASE_DIR), name="reports")
-
-# 通用配置
-DEFAULT_SCAN_CONFIG = {
-    "scan_method": "jacoco",
-    "project_type": "maven",
-    "docker_image": "jacoco-scanner:latest",
-    "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/57031f94-2e1a-473c-8efc-f371b648dfbe",
-    "coverage_threshold": 50.0,
-    "maven_goals": ["clean", "test", "jacoco:report"],
-    "report_formats": ["xml", "html", "json"],
-    "use_docker": True,
-    "use_incremental_update": True,
-    "scan_timeout": 1800,
-    "max_retries": 3,
-}
 
 def get_project_name_from_url(repo_url: str) -> str:
     """从仓库URL提取项目名称"""
@@ -139,7 +116,7 @@ def save_html_report(reports_dir: str, project_name: str, commit_id: str, reques
 async def root():
     return {
         "message": "Universal JaCoCo Scanner API is running",
-        "version": config.API_VERSION,
+        "version": "2.0.0",
         "docs": "/docs",
         "health": "/health"
     }
@@ -148,7 +125,7 @@ async def root():
 async def health_check():
     return {
         "status": "healthy",
-        "version": config.API_VERSION,
+        "version": "2.0.0",
         "timestamp": time.time(),
         "service": "Universal JaCoCo Scanner"
     }
@@ -223,11 +200,7 @@ def github_webhook_no_auth(request: Request):
         service_config = get_service_config(repo_url)
         service_name = service_config['service_name']
 
-        # 调试：显示配置信息
-        logger.info(f"[{request_id}] 配置信息:")
-        logger.info(f"[{request_id}]   use_docker: {service_config.get('use_docker', 'unknown')}")
-        logger.info(f"[{request_id}]   use_shared_container: {service_config.get('use_shared_container', 'unknown')}")
-        logger.info(f"[{request_id}]   force_local_scan: {service_config.get('force_local_scan', 'unknown')}")
+
         
         logger.info(f"[{request_id}] Webhook received: {event_type}")
         logger.info(f"[{request_id}] Repository: {repo_url}")
@@ -311,7 +284,7 @@ def github_webhook_no_auth(request: Request):
                         request_id=request_id,
                         html_report_url=report_data.get('html_report_url')  # 传递HTML报告链接
                     )
-                    logger.info(f"[{request_id}] ✅ 飞书通知已发送")
+                    logger.info(f"[{request_id}] ✅ lark通知已发送")
                 except Exception as notify_error:
                     logger.error(f"[{request_id}] ❌ 发送通知失败: {notify_error}")
                     import traceback
@@ -466,7 +439,7 @@ def start_server():
     logger.info(f"📖 API documentation: http://localhost:{port}/docs")
 
     # 设置信号处理器
-    def signal_handler(signum, frame):
+    def signal_handler(signum, _):
         logger.info(f"收到信号 {signum}，正在优雅关闭服务...")
         sys.exit(0)
 
@@ -500,73 +473,7 @@ def start_server():
     finally:
         logger.info("🔚 服务已关闭")
 
-@app.get("/docker/status")
-def get_docker_status():
-    """获取Docker容器状态"""
-    try:
-        from docker_manager import get_shared_container_manager
 
-        manager = get_shared_container_manager()
-        status = manager.get_container_status()
-
-        return {
-            "shared_container": status,
-            "timestamp": time.time()
-        }
-    except Exception as e:
-        return {
-            "error": str(e),
-            "shared_container": {"status": "error"},
-            "timestamp": time.time()
-        }
-
-@app.post("/docker/start")
-def start_shared_container():
-    """启动共享Docker容器"""
-    try:
-        from docker_manager import get_shared_container_manager
-
-        manager = get_shared_container_manager()
-        success = manager.start_shared_container()
-
-        if success:
-            status = manager.get_container_status()
-            return {
-                "success": True,
-                "message": "共享容器启动成功",
-                "container_status": status
-            }
-        else:
-            return {
-                "success": False,
-                "message": "共享容器启动失败"
-            }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "启动共享容器时发生异常"
-        }
-
-@app.post("/docker/stop")
-def stop_shared_container():
-    """停止共享Docker容器"""
-    try:
-        from docker_manager import get_shared_container_manager
-
-        manager = get_shared_container_manager()
-        manager.stop_shared_container()
-
-        return {
-            "success": True,
-            "message": "共享容器已停止"
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "停止共享容器时发生异常"
-        }
 
 if __name__ == "__main__":
     start_server()

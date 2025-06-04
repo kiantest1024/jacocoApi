@@ -8,14 +8,14 @@ logger = logging.getLogger(__name__)
 
 
 class FeishuNotifier:
-    """飞书机器人通知器。"""
+    """lark机器人通知器。"""
     
     def __init__(self, webhook_url: str):
         """
-        初始化飞书通知器。
+        初始化lark通知器。
         
         参数:
-            webhook_url: 飞书机器人 webhook URL
+            webhook_url: lark机器人 webhook URL
         """
         self.webhook_url = webhook_url
         
@@ -30,7 +30,7 @@ class FeishuNotifier:
         html_report_url: str = None
     ) -> bool:
         """
-        发送 JaCoCo 覆盖率报告到飞书。
+        发送 JaCoCo 覆盖率报告到lark。
         
         参数:
             repo_url: 仓库 URL
@@ -53,7 +53,7 @@ class FeishuNotifier:
             return self._send_message(message)
             
         except Exception as e:
-            logger.error(f"[{request_id}] 发送飞书通知失败: {str(e)}")
+            logger.error(f"[{request_id}] 发送lark通知失败: {str(e)}")
             return False
     
     def send_error_notification(
@@ -65,7 +65,7 @@ class FeishuNotifier:
         request_id: str
     ) -> bool:
         """
-        发送错误通知到飞书。
+        发送错误通知到lark。
         
         参数:
             repo_url: 仓库 URL
@@ -87,7 +87,7 @@ class FeishuNotifier:
             return self._send_message(message)
             
         except Exception as e:
-            logger.error(f"[{request_id}] 发送飞书错误通知失败: {str(e)}")
+            logger.error(f"[{request_id}] 发送lark错误通知失败: {str(e)}")
             return False
     
     def _build_jacoco_message(
@@ -267,7 +267,7 @@ class FeishuNotifier:
         return message
     
     def _send_message(self, message: Dict[str, Any]) -> bool:
-        """发送消息到飞书。"""
+        """发送消息到lark。"""
 
         # 检查是否启用通知
         if not LARK_CONFIG.get("enable_notifications", True):
@@ -294,10 +294,10 @@ class FeishuNotifier:
                 if response.status_code == 200:
                     result = response.json()
                     if result.get('code') == 0:
-                        logger.info("飞书通知发送成功")
+                        logger.info("lark通知发送成功")
                         return True
                     else:
-                        logger.error(f"飞书通知发送失败: {result}")
+                        logger.error(f"lark通知发送失败: {result}")
                         if attempt < retry_count - 1:
                             logger.info(f"第{attempt + 1}次重试...")
                             import time
@@ -305,7 +305,7 @@ class FeishuNotifier:
                             continue
                         return False
                 else:
-                    logger.error(f"飞书通知发送失败，状态码: {response.status_code}")
+                    logger.error(f"lark通知发送失败，状态码: {response.status_code}")
                     if attempt < retry_count - 1:
                         logger.info(f"第{attempt + 1}次重试...")
                         import time
@@ -314,7 +314,7 @@ class FeishuNotifier:
                     return False
 
             except Exception as e:
-                logger.error(f"发送飞书通知异常: {str(e)}")
+                logger.error(f"发送lark通知异常: {str(e)}")
                 if attempt < retry_count - 1:
                     logger.info(f"第{attempt + 1}次重试...")
                     import time
@@ -339,7 +339,7 @@ def send_jacoco_notification(
     发送 JaCoCo 覆盖率通知的便捷函数。
     
     参数:
-        webhook_url: 飞书机器人 webhook URL
+        webhook_url: lark机器人 webhook URL
         repo_url: 仓库 URL
         branch_name: 分支名称
         commit_id: 提交 ID
@@ -351,7 +351,7 @@ def send_jacoco_notification(
         是否发送成功
     """
     if not webhook_url:
-        logger.warning(f"[{request_id}] 未配置飞书 webhook URL，跳过通知")
+        logger.warning(f"[{request_id}] 未配置lark webhook URL，跳过通知")
         return False
     
     notifier = FeishuNotifier(webhook_url)
@@ -372,7 +372,7 @@ def send_error_notification(
     发送错误通知的便捷函数。
     
     参数:
-        webhook_url: 飞书机器人 webhook URL
+        webhook_url: lark机器人 webhook URL
         repo_url: 仓库 URL
         branch_name: 分支名称
         commit_id: 提交 ID
@@ -383,7 +383,7 @@ def send_error_notification(
         是否发送成功
     """
     if not webhook_url:
-        logger.warning(f"[{request_id}] 未配置飞书 webhook URL，跳过错误通知")
+        logger.warning(f"[{request_id}] 未配置lark webhook URL，跳过错误通知")
         return False
     
     notifier = FeishuNotifier(webhook_url)

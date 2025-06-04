@@ -85,7 +85,18 @@ def get_service_config(repo_url: str) -> Dict[str, Any]:
     })
     return config
 
-def save_html_report(reports_dir: str, project_name: str, commit_id: str, request_id: str) -> str:
+def get_server_base_url(request: Request = None) -> str:
+    """获取服务器基础URL"""
+    if request:
+        # 从请求中获取实际的host
+        host = request.headers.get("host", "localhost:8002")
+        scheme = "https" if request.headers.get("x-forwarded-proto") == "https" else "http"
+        return f"{scheme}://{host}"
+    else:
+        # 默认值
+        return "http://localhost:8002"
+
+def save_html_report(reports_dir: str, project_name: str, commit_id: str, request_id: str, base_url: str = None) -> str:
     """保存HTML报告并返回访问链接"""
     try:
         import shutil
@@ -111,12 +122,18 @@ def save_html_report(reports_dir: str, project_name: str, commit_id: str, reques
         shutil.copytree(source_html_dir, target_html_dir)
 
         # 生成访问链接
-        report_url = f"/reports/{project_name}/{commit_id[:8]}/index.html"
+        relative_url = f"/reports/{project_name}/{commit_id[:8]}/index.html"
+
+        # 如果提供了base_url，生成完整URL，否则返回相对URL
+        if base_url:
+            full_url = f"{base_url}{relative_url}"
+        else:
+            full_url = relative_url
 
         logger.info(f"[{request_id}] HTML报告已保存: {target_html_dir}")
-        logger.info(f"[{request_id}] 访问链接: {report_url}")
+        logger.info(f"[{request_id}] 访问链接: {full_url}")
 
-        return report_url
+        return full_url
 
     except Exception as e:
         logger.error(f"[{request_id}] 保存HTML报告失败: {str(e)}")
@@ -230,15 +247,13 @@ async def github_webhook_no_auth(request: Request):
             report_data = parse_jacoco_reports(reports_dir, request_id)
 
             # 保存HTML报告并生成访问链接
-            html_report_url = save_html_report(reports_dir, service_name, commit_id, request_id)
+            base_url = get_server_base_url(request)
+            html_report_url = save_html_report(reports_dir, service_name, commit_id, request_id, base_url)
 
-            # 生成完整的HTML报告链接
+            # 添加HTML报告链接到报告数据
             if html_report_url:
-                # 获取服务器地址
-                server_host = "localhost:8002"  # 可以从配置中获取
-                full_html_url = f"http://{server_host}{html_report_url}"
-                report_data['html_report_url'] = full_html_url
-                logger.info(f"[{request_id}] HTML报告链接: {full_html_url}")
+                report_data['html_report_url'] = html_report_url
+                logger.info(f"[{request_id}] HTML报告链接: {html_report_url}")
 
             # 发送通知
             webhook_url = service_config.get('notification_webhook')
@@ -313,10 +328,11 @@ async def github_webhook_no_auth(request: Request):
         raise HTTPException(status_code=500, detail=f"Webhook processing failed: {str(e)}")
 
 @app.get("/reports")
-async def list_reports():
+async def list_reports(request: Request):
     """列出所有可用的HTML报告"""
     try:
         reports = []
+        base_url = get_server_base_url(request)
 
         if os.path.exists(REPORTS_BASE_DIR):
             for project_name in os.listdir(REPORTS_BASE_DIR):
@@ -329,10 +345,11 @@ async def list_reports():
                         if os.path.isdir(commit_path) and os.path.exists(index_file):
                             # 获取文件修改时间
                             mtime = os.path.getmtime(index_file)
+                            relative_url = f"/reports/{project_name}/{commit_dir}/index.html"
                             project_reports.append({
                                 "commit_id": commit_dir,
-                                "url": f"/reports/{project_name}/{commit_dir}/index.html",
-                                "full_url": f"http://localhost:8002/reports/{project_name}/{commit_dir}/index.html",
+                                "url": relative_url,
+                                "full_url": f"{base_url}{relative_url}",
                                 "created_time": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(mtime))
                             })
 

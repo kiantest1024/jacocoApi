@@ -260,8 +260,23 @@ def _run_docker_scan(
                 }
         else:
             logger.error(f"[{request_id}] Docker scan failed with return code {result.returncode}")
+            logger.error(f"[{request_id}] Docker stdout: {result.stdout}")
             logger.error(f"[{request_id}] Docker stderr: {result.stderr}")
-            raise Exception(f"Docker scan failed with return code {result.returncode}: {result.stderr}")
+
+            # 分析具体错误
+            error_details = []
+            if result.stdout:
+                if "Non-resolvable parent POM" in result.stdout:
+                    error_details.append("父POM解析失败")
+                if "Could not find artifact" in result.stdout:
+                    error_details.append("依赖下载失败")
+                if "MaxPermSize" in result.stdout:
+                    error_details.append("Java参数配置问题")
+                if "No such file or directory" in result.stdout:
+                    error_details.append("文件路径问题")
+
+            error_summary = ", ".join(error_details) if error_details else "未知错误"
+            raise Exception(f"Docker scan failed with return code {result.returncode}: {error_summary}. Details: {result.stderr or result.stdout}")
 
     except subprocess.TimeoutExpired:
         logger.error(f"[{request_id}] Docker scan timed out")
@@ -509,45 +524,57 @@ def _run_local_scan(
 
         # 检查是否是依赖解析问题并尝试回退方案
         if result.returncode != 0 and "Non-resolvable parent POM" in result.stdout:
-            logger.warning(f"[{request_id}] 检测到父POM解析问题，尝试跳过父POM验证...")
+            logger.warning(f"[{request_id}] 检测到父POM解析问题，尝试创建独立pom.xml...")
 
-            # 尝试跳过父POM验证的扫描
-            maven_cmd_fallback = [
-                "mvn", "clean", "compile", "test-compile",
-                "org.jacoco:jacoco-maven-plugin:prepare-agent",
-                "test",
-                "org.jacoco:jacoco-maven-plugin:report",
-                "-Dmaven.test.failure.ignore=true",
-                "-Dproject.build.sourceEncoding=UTF-8",
-                "-Dmaven.compiler.source=11",
-                "-Dmaven.compiler.target=11",
-                "-Dcheckstyle.skip=true",  # 跳过代码检查
-                "-Dpmd.skip=true",  # 跳过PMD检查
-                "-Dspotbugs.skip=true",  # 跳过SpotBugs检查
-                "-DskipTests=false",  # 确保运行测试
-                "-U"
-            ]
-
-            logger.info(f"[{request_id}] 尝试回退方案...")
+            # 创建独立的pom.xml，不依赖父POM
             try:
-                result_fallback = subprocess.run(
-                    maven_cmd_fallback,
-                    cwd=repo_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=600
-                )
+                independent_pom_content = create_independent_pom(repo_dir, request_id)
+                if independent_pom_content:
+                    # 备份原始pom.xml
+                    original_pom = os.path.join(repo_dir, "pom.xml")
+                    backup_pom = os.path.join(repo_dir, "pom.xml.backup")
+                    shutil.copy2(original_pom, backup_pom)
 
-                logger.info(f"[{request_id}] 回退方案执行完成，返回码: {result_fallback.returncode}")
-                if result_fallback.returncode == 0:
-                    logger.info(f"[{request_id}] 回退方案成功")
-                    result = result_fallback  # 使用回退方案的结果
-                else:
-                    logger.warning(f"[{request_id}] 回退方案也失败: {result_fallback.stdout}")
-            except subprocess.TimeoutExpired:
-                logger.warning(f"[{request_id}] 回退方案超时")
+                    # 写入独立pom.xml
+                    with open(original_pom, 'w', encoding='utf-8') as f:
+                        f.write(independent_pom_content)
+
+                    logger.info(f"[{request_id}] 创建独立pom.xml成功，重新尝试Maven扫描...")
+
+                    # 使用独立pom.xml重新扫描
+                    maven_cmd_independent = [
+                        "mvn", "clean", "compile", "test-compile", "test",
+                        "jacoco:report",
+                        "-Dmaven.test.failure.ignore=true",
+                        "-Dproject.build.sourceEncoding=UTF-8",
+                        "-Dmaven.compiler.source=11",
+                        "-Dmaven.compiler.target=11",
+                        "-Dcheckstyle.skip=true",
+                        "-Dpmd.skip=true",
+                        "-Dspotbugs.skip=true"
+                    ]
+
+                    result_independent = subprocess.run(
+                        maven_cmd_independent,
+                        cwd=repo_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=600
+                    )
+
+                    logger.info(f"[{request_id}] 独立pom.xml扫描完成，返回码: {result_independent.returncode}")
+                    if result_independent.returncode == 0:
+                        logger.info(f"[{request_id}] 独立pom.xml扫描成功")
+                        result = result_independent  # 使用独立扫描的结果
+                    else:
+                        logger.warning(f"[{request_id}] 独立pom.xml扫描也失败: {result_independent.stdout}")
+
+                    # 恢复原始pom.xml
+                    shutil.copy2(backup_pom, original_pom)
+                    os.remove(backup_pom)
+
             except Exception as e:
-                logger.warning(f"[{request_id}] 回退方案异常: {e}")
+                logger.warning(f"[{request_id}] 独立pom.xml方案异常: {e}")
 
         # 7. 检查target目录内容
         target_dir = os.path.join(repo_dir, "target")
@@ -727,6 +754,121 @@ def _run_local_scan(
             logger.info(f"[{request_id}] 清理临时目录完成")
         except Exception as cleanup_error:
             logger.warning(f"[{request_id}] 清理失败: {cleanup_error}")
+
+def create_independent_pom(repo_dir: str, request_id: str) -> str:
+    """
+    创建独立的pom.xml，不依赖父POM
+    """
+    try:
+        # 读取原始pom.xml获取基本信息
+        original_pom = os.path.join(repo_dir, "pom.xml")
+        with open(original_pom, 'r', encoding='utf-8') as f:
+            original_content = f.read()
+
+        # 提取项目基本信息
+        import re
+
+        # 提取groupId, artifactId, version
+        group_match = re.search(r'<groupId>([^<]+)</groupId>', original_content)
+        artifact_match = re.search(r'<artifactId>([^<]+)</artifactId>', original_content)
+        version_match = re.search(r'<version>([^<]+)</version>', original_content)
+
+        group_id = group_match.group(1) if group_match else "com.example"
+        artifact_id = artifact_match.group(1) if artifact_match else "test-project"
+        version = version_match.group(1) if version_match else "1.0.0"
+
+        logger.info(f"[{request_id}] 提取项目信息: {group_id}:{artifact_id}:{version}")
+
+        # 检查是否有源代码目录
+        src_main_java = os.path.join(repo_dir, "src", "main", "java")
+        src_test_java = os.path.join(repo_dir, "src", "test", "java")
+        has_main_code = os.path.exists(src_main_java) and any(f.endswith('.java') for f in os.listdir(src_main_java) if os.path.isfile(os.path.join(src_main_java, f)))
+        has_test_code = os.path.exists(src_test_java) and any(f.endswith('.java') for f in os.listdir(src_test_java) if os.path.isfile(os.path.join(src_test_java, f)))
+
+        # 创建独立的pom.xml
+        independent_pom = f'''<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>{group_id}</groupId>
+    <artifactId>{artifact_id}</artifactId>
+    <version>{version}</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <jacoco.version>0.8.7</jacoco.version>
+    </properties>
+
+    <dependencies>
+        <!-- JUnit for testing -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Maven Compiler Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>11</source>
+                    <target>11</target>
+                </configuration>
+            </plugin>
+
+            <!-- JaCoCo Plugin -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${{jacoco.version}}</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Surefire Plugin for running tests -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.0.0-M5</version>
+                <configuration>
+                    <testFailureIgnore>true</testFailureIgnore>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>'''
+
+        logger.info(f"[{request_id}] 创建独立pom.xml成功")
+        return independent_pom
+
+    except Exception as e:
+        logger.error(f"[{request_id}] 创建独立pom.xml失败: {e}")
+        return None
 
 def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
     """

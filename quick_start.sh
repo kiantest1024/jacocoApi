@@ -11,9 +11,19 @@ echo "========================================"
 echo
 
 # 检查 Python 是否安装
-if ! command -v python3 &> /dev/null; then
-    echo "错误: Python3 未安装或不在 PATH 中"
+if command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+    echo "✓ 找到 Python3: $(which python3)"
+    echo "✓ Python 版本: $(python3 --version)"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+    echo "✓ 找到 Python: $(which python)"
+    echo "✓ Python 版本: $(python --version)"
+else
+    echo "❌ 错误: Python 未安装或不在 PATH 中"
     echo "请安装 Python 3.8+ 并确保在 PATH 中"
+    echo "Ubuntu/Debian: sudo apt update && sudo apt install python3 python3-pip python3-venv"
+    echo "CentOS/RHEL: sudo yum install python3 python3-pip"
     exit 1
 fi
 
@@ -27,7 +37,7 @@ fi
 # 检查虚拟环境
 if [ ! -d "venv" ]; then
     echo "创建虚拟环境..."
-    python3 -m venv venv
+    $PYTHON_CMD -m venv venv
 fi
 
 # 激活虚拟环境
@@ -49,12 +59,13 @@ fi
 
 # 检查 Redis 是否运行
 echo "检查 Redis 连接..."
-if python3 -c "import redis; r=redis.Redis(); r.ping(); print('Redis 连接正常')" 2>/dev/null; then
+if $PYTHON_CMD -c "import redis; r=redis.Redis(); r.ping(); print('Redis 连接正常')" 2>/dev/null; then
     echo "✓ Redis 连接正常"
 else
     echo "⚠ 警告: Redis 连接失败"
     echo "请确保 Redis 服务正在运行"
-    echo "您可以使用 Docker 启动 Redis: docker run -d -p 6379:6379 redis:alpine"
+    echo "Ubuntu: sudo apt install redis-server && sudo systemctl start redis"
+    echo "或使用 Docker: docker run -d -p 6379:6379 redis:alpine"
     echo
 fi
 
@@ -123,7 +134,7 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # 启动 FastAPI 服务器
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+$PYTHON_CMD -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload
 
 # 如果到达这里，说明服务器正常退出
 cleanup

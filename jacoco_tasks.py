@@ -376,8 +376,29 @@ def _run_local_scan(
         )
 
         logger.info(f"[{request_id}] Maven执行完成，返回码: {result.returncode}")
+        logger.info(f"[{request_id}] Maven输出:\n{result.stdout}")
+        logger.info(f"[{request_id}] Maven错误:\n{result.stderr}")
 
-        # 6. 查找并复制JaCoCo报告
+        # 6. 检查target目录内容
+        target_dir = os.path.join(repo_dir, "target")
+        if os.path.exists(target_dir):
+            logger.info(f"[{request_id}] target目录存在，列出内容...")
+            try:
+                for root, _, files in os.walk(target_dir):
+                    level = root.replace(target_dir, '').count(os.sep)
+                    indent = ' ' * 2 * level
+                    logger.info(f"[{request_id}] {indent}{os.path.basename(root)}/")
+                    subindent = ' ' * 2 * (level + 1)
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        file_size = os.path.getsize(file_path)
+                        logger.info(f"[{request_id}] {subindent}{file} ({file_size} bytes)")
+            except Exception as e:
+                logger.warning(f"[{request_id}] 列出target目录失败: {e}")
+        else:
+            logger.warning(f"[{request_id}] target目录不存在")
+
+        # 7. 查找并复制JaCoCo报告
         logger.info(f"[{request_id}] 查找JaCoCo报告...")
 
         # 可能的报告位置
@@ -461,12 +482,15 @@ def _run_local_scan(
         logger.error(f"[{request_id}] 本地扫描失败: {str(e)}")
         return {"status": "error", "message": str(e), "scan_method": "local"}
     finally:
-        # 清理临时目录
-        try:
-            shutil.rmtree(temp_dir)
-            logger.info(f"[{request_id}] 清理临时目录完成")
-        except Exception as cleanup_error:
-            logger.warning(f"[{request_id}] 清理失败: {cleanup_error}")
+        # 延迟清理临时目录以便调试
+        logger.info(f"[{request_id}] 临时目录保留用于调试: {temp_dir}")
+        logger.info(f"[{request_id}] 手动清理命令: rm -rf {temp_dir}")
+        # 注释掉自动清理，便于调试
+        # try:
+        #     shutil.rmtree(temp_dir)
+        #     logger.info(f"[{request_id}] 清理临时目录完成")
+        # except Exception as cleanup_error:
+        #     logger.warning(f"[{request_id}] 清理失败: {cleanup_error}")
 
 def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
     """

@@ -50,86 +50,7 @@ def run_docker_jacoco_scan(
             **report_data
         }
 
-        webhook_url = service_config.get('notification_webhook')
-        logger.info(f"[{request_id}] ==================== 通知调试开始 ====================")
-        logger.info(f"[{request_id}] 检查通知配置:")
-        logger.info(f"[{request_id}]   webhook_url存在: {'✅' if webhook_url else '❌'}")
-        logger.info(f"[{request_id}]   webhook_url长度: {len(webhook_url) if webhook_url else 0}")
-        logger.info(f"[{request_id}]   webhook_url: {webhook_url}")
-        logger.info(f"[{request_id}] service_config keys: {list(service_config.keys())}")
-        logger.info(f"[{request_id}] report_data keys: {list(report_data.keys())}")
-        logger.info(f"[{request_id}] final_result keys: {list(final_result.keys())}")
-
-        # 检查coverage_summary在report_data或final_result中
-        coverage_summary = None
-        if 'coverage_summary' in report_data:
-            coverage_summary = report_data['coverage_summary']
-            logger.info(f"[{request_id}] 从report_data获取coverage_summary")
-        elif 'coverage_summary' in final_result:
-            coverage_summary = final_result['coverage_summary']
-            logger.info(f"[{request_id}] 从final_result获取coverage_summary")
-        else:
-            # 如果没有coverage_summary，创建一个默认的（可能是0%覆盖率）
-            coverage_summary = {
-                "line_coverage": final_result.get('line_coverage', final_result.get('coverage_percentage', 0)),
-                "branch_coverage": final_result.get('branch_coverage', 0),
-                "instruction_coverage": final_result.get('instruction_coverage', 0),
-                "method_coverage": final_result.get('method_coverage', 0),
-                "class_coverage": final_result.get('class_coverage', 0)
-            }
-            logger.info(f"[{request_id}] 创建默认coverage_summary: {coverage_summary}")
-
-            # 如果所有覆盖率都是0，说明没有测试或没有代码
-            if all(v == 0 for v in coverage_summary.values()):
-                logger.info(f"[{request_id}] 检测到0%覆盖率，可能原因：无测试代码或无主代码")
-
-        if webhook_url:
-            try:
-                logger.info(f"[{request_id}] ✅ 开始发送飞书通知...")
-                logger.info(f"[{request_id}] 通知参数:")
-                logger.info(f"[{request_id}]   webhook_url: {webhook_url}")
-                logger.info(f"[{request_id}]   repo_url: {repo_url}")
-                logger.info(f"[{request_id}]   branch_name: {branch_name}")
-                logger.info(f"[{request_id}]   commit_id: {commit_id}")
-                logger.info(f"[{request_id}]   coverage_summary: {coverage_summary}")
-                logger.info(f"[{request_id}]   scan_result status: {final_result.get('status', 'unknown')}")
-
-                # 导入通知函数
-                logger.info(f"[{request_id}] 导入通知函数...")
-                from feishu_notification import send_jacoco_notification
-
-                logger.info(f"[{request_id}] 调用通知函数...")
-                result = send_jacoco_notification(
-                    webhook_url=webhook_url,
-                    repo_url=repo_url,
-                    branch_name=branch_name,
-                    commit_id=commit_id,
-                    coverage_data=coverage_summary,
-                    scan_result=final_result,
-                    request_id=request_id
-                )
-
-                logger.info(f"[{request_id}] 通知函数返回结果: {result}")
-
-                if result:
-                    logger.info(f"[{request_id}] ✅ 飞书通知发送成功")
-                    final_result["notification_sent"] = True
-                else:
-                    logger.warning(f"[{request_id}] ❌ 飞书通知发送失败（返回False）")
-                    final_result["notification_sent"] = False
-
-            except Exception as e:
-                logger.error(f"[{request_id}] ❌ 飞书通知发送异常: {str(e)}")
-                final_result["notification_sent"] = False
-                final_result["notification_error"] = str(e)
-                import traceback
-                logger.error(f"[{request_id}] 通知异常详情: {traceback.format_exc()}")
-        else:
-            logger.warning(f"[{request_id}] ⚠️ 跳过飞书通知: 未配置webhook_url")
-            final_result["notification_skip_reason"] = "no_webhook_url"
-            final_result["notification_sent"] = False
-
-        logger.info(f"[{request_id}] ==================== 通知调试结束 ====================")
+        # 通知逻辑已移到 run_jacoco_scan_docker 函数中
 
         return final_result
 
@@ -167,19 +88,102 @@ def run_jacoco_scan_docker(
     request_id: str
 ) -> Dict[str, Any]:
     """
-    运行JaCoCo扫描，根据配置选择Docker或本地扫描
+    运行JaCoCo扫描，根据配置选择Docker或本地扫描，并处理通知
     """
+    # 执行扫描
+    scan_result = None
+
     # 检查是否强制使用本地扫描
     if service_config.get('force_local_scan', False) or not service_config.get('use_docker', True):
         logger.info(f"[{request_id}] 配置为使用本地扫描")
-        return _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
+        scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
+    else:
+        # 尝试Docker扫描，失败时回退到本地扫描
+        try:
+            scan_result = _run_docker_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
+        except Exception as docker_error:
+            logger.warning(f"[{request_id}] Docker扫描失败，尝试本地扫描: {str(docker_error)}")
+            scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
 
-    # 尝试Docker扫描，失败时回退到本地扫描
-    try:
-        return _run_docker_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
-    except Exception as docker_error:
-        logger.warning(f"[{request_id}] Docker扫描失败，尝试本地扫描: {str(docker_error)}")
-        return _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
+    # 处理通知逻辑
+    webhook_url = service_config.get('notification_webhook')
+    logger.info(f"[{request_id}] ==================== 通知调试开始 ====================")
+    logger.info(f"[{request_id}] 检查通知配置:")
+    logger.info(f"[{request_id}]   webhook_url存在: {'✅' if webhook_url else '❌'}")
+    logger.info(f"[{request_id}]   webhook_url长度: {len(webhook_url) if webhook_url else 0}")
+    logger.info(f"[{request_id}]   webhook_url: {webhook_url}")
+    logger.info(f"[{request_id}] service_config keys: {list(service_config.keys())}")
+    logger.info(f"[{request_id}] scan_result keys: {list(scan_result.keys())}")
+
+    # 检查coverage_summary在scan_result中
+    coverage_summary = None
+    if 'coverage_summary' in scan_result:
+        coverage_summary = scan_result['coverage_summary']
+        logger.info(f"[{request_id}] 从scan_result获取coverage_summary")
+    else:
+        # 如果没有coverage_summary，创建一个默认的（可能是0%覆盖率）
+        coverage_summary = {
+            "line_coverage": scan_result.get('line_coverage', scan_result.get('coverage_percentage', 0)),
+            "branch_coverage": scan_result.get('branch_coverage', 0),
+            "instruction_coverage": scan_result.get('instruction_coverage', 0),
+            "method_coverage": scan_result.get('method_coverage', 0),
+            "class_coverage": scan_result.get('class_coverage', 0)
+        }
+        logger.info(f"[{request_id}] 创建默认coverage_summary: {coverage_summary}")
+
+        # 如果所有覆盖率都是0，说明没有测试或没有代码
+        if all(v == 0 for v in coverage_summary.values()):
+            logger.info(f"[{request_id}] 检测到0%覆盖率，可能原因：无测试代码或无主代码")
+
+    if webhook_url:
+        try:
+            logger.info(f"[{request_id}] ✅ 开始发送飞书通知...")
+            logger.info(f"[{request_id}] 通知参数:")
+            logger.info(f"[{request_id}]   webhook_url: {webhook_url}")
+            logger.info(f"[{request_id}]   repo_url: {repo_url}")
+            logger.info(f"[{request_id}]   branch_name: {branch_name}")
+            logger.info(f"[{request_id}]   commit_id: {commit_id}")
+            logger.info(f"[{request_id}]   coverage_summary: {coverage_summary}")
+            logger.info(f"[{request_id}]   scan_result status: {scan_result.get('status', 'unknown')}")
+
+            # 导入通知函数
+            logger.info(f"[{request_id}] 导入通知函数...")
+            from feishu_notification import send_jacoco_notification
+
+            logger.info(f"[{request_id}] 调用通知函数...")
+            result = send_jacoco_notification(
+                webhook_url=webhook_url,
+                repo_url=repo_url,
+                branch_name=branch_name,
+                commit_id=commit_id,
+                coverage_data=coverage_summary,
+                scan_result=scan_result,
+                request_id=request_id
+            )
+
+            logger.info(f"[{request_id}] 通知函数返回结果: {result}")
+
+            if result:
+                logger.info(f"[{request_id}] ✅ 飞书通知发送成功")
+                scan_result["notification_sent"] = True
+            else:
+                logger.warning(f"[{request_id}] ❌ 飞书通知发送失败（返回False）")
+                scan_result["notification_sent"] = False
+
+        except Exception as e:
+            logger.error(f"[{request_id}] ❌ 飞书通知发送异常: {str(e)}")
+            scan_result["notification_sent"] = False
+            scan_result["notification_error"] = str(e)
+            import traceback
+            logger.error(f"[{request_id}] 通知异常详情: {traceback.format_exc()}")
+    else:
+        logger.warning(f"[{request_id}] ⚠️ 跳过飞书通知: 未配置webhook_url")
+        scan_result["notification_skip_reason"] = "no_webhook_url"
+        scan_result["notification_sent"] = False
+
+    logger.info(f"[{request_id}] ==================== 通知调试结束 ====================")
+
+    return scan_result
 
 def _run_docker_scan(
     repo_url: str,

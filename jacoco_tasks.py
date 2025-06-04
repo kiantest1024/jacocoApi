@@ -298,9 +298,9 @@ def parse_jacoco_xml_file(xml_path: str, request_id: str) -> Dict[str, Any]:
 def _run_local_scan(
     repo_url: str,
     commit_id: str,
-    branch_name: str,
+    _: str,  # branch_name
     reports_dir: str,
-    service_config: Dict[str, Any],
+    __: Dict[str, Any],  # service_config
     request_id: str
 ) -> Dict[str, Any]:
     """
@@ -487,6 +487,41 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
         if 'jacoco-maven-plugin' in content:
             logger.info(f"[{request_id}] JaCoCo插件已存在，跳过增强")
             return True
+
+        # 检查并添加JUnit依赖
+        if 'junit' not in content.lower():
+            logger.info(f"[{request_id}] 添加JUnit依赖...")
+            junit_dependency = '''
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
+        </dependency>'''
+
+            if '<dependencies>' in content:
+                # 在现有dependencies中添加
+                content = content.replace(
+                    '<dependencies>',
+                    f'<dependencies>{junit_dependency}'
+                )
+                logger.info(f"[{request_id}] 在现有dependencies中添加JUnit")
+            else:
+                # 创建dependencies节点
+                dependencies_block = f'''
+    <dependencies>{junit_dependency}
+    </dependencies>'''
+
+                # 在</properties>后添加
+                if '</properties>' in content:
+                    content = content.replace('</properties>', f'</properties>{dependencies_block}')
+                else:
+                    # 在</version>后添加
+                    version_pattern = r'(\s*</version>\s*)'
+                    if re.search(version_pattern, content):
+                        content = re.sub(version_pattern, r'\1' + dependencies_block, content, count=1)
+
+                logger.info(f"[{request_id}] 创建dependencies节点并添加JUnit")
 
         # 添加JaCoCo属性
         jacoco_property = '<jacoco.version>0.8.7</jacoco.version>'

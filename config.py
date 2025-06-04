@@ -22,6 +22,15 @@ DEFAULT_SCAN_CONFIG: Dict[str, Any] = {
     "max_retries": 3,
 }
 
+# Lark通知配置
+LARK_CONFIG: Dict[str, Any] = {
+    "webhook_url": "https://open.larksuite.com/open-apis/bot/v2/hook/57031f94-2e1a-473c-8efc-f371b648dfbe",
+    "enable_notifications": True,
+    "timeout": 10,
+    "retry_count": 3,
+    "retry_delay": 1,
+}
+
 # 自定义项目配置
 CUSTOM_PROJECT_CONFIG: Dict[str, Dict[str, Any]] = {}
 

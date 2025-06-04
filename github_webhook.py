@@ -436,33 +436,80 @@ async def webhook_handler_no_auth(request: Request):
         # 发送 JaCoCo 扫描任务到 Celery
         from jacoco_tasks import run_docker_jacoco_scan
 
-        task = run_docker_jacoco_scan.delay(
-            repo_url=repo_url,
-            commit_id=commit_id,
-            branch_name=branch_name,
-            service_config=service_config,
-            request_id=request_id
-        )
+        # 检查是否启用同步模式（用于调试）
+        sync_mode = service_config.get('sync_mode', False)
 
-        logger.info(f"[{request_id}] JaCoCo 扫描任务已排队: {task.id} 用于项目 {service_name}")
+        if sync_mode:
+            logger.info(f"[{request_id}] 使用同步模式执行扫描")
+            try:
+                # 同步执行扫描
+                scan_result = run_docker_jacoco_scan(
+                    repo_url=repo_url,
+                    commit_id=commit_id,
+                    branch_name=branch_name,
+                    service_config=service_config,
+                    request_id=request_id
+                )
 
-        # 返回成功响应
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "accepted",
-                "task_id": task.id,
-                "request_id": request_id,
-                "event_type": event_type,
-                "message": f"项目 {service_name} 的提交 {commit_id[:8]} 的 JaCoCo 扫描任务已成功排队",
-                "extracted_info": {
-                    "repo_url": repo_url,
-                    "commit_id": commit_id,
-                    "branch_name": branch_name,
-                    "service_name": service_name
+                logger.info(f"[{request_id}] 同步扫描完成")
+
+                # 返回扫描结果
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "completed",
+                        "request_id": request_id,
+                        "event_type": event_type,
+                        "message": f"项目 {service_name} 的提交 {commit_id[:8]} 的 JaCoCo 扫描已完成",
+                        "extracted_info": {
+                            "repo_url": repo_url,
+                            "commit_id": commit_id,
+                            "branch_name": branch_name,
+                            "service_name": service_name
+                        },
+                        **scan_result
+                    }
+                )
+
+            except Exception as e:
+                logger.error(f"[{request_id}] 同步扫描失败: {str(e)}")
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "request_id": request_id,
+                        "message": f"扫描失败: {str(e)}"
+                    }
+                )
+        else:
+            # 异步执行（原有逻辑）
+            task = run_docker_jacoco_scan.delay(
+                repo_url=repo_url,
+                commit_id=commit_id,
+                branch_name=branch_name,
+                service_config=service_config,
+                request_id=request_id
+            )
+
+            logger.info(f"[{request_id}] JaCoCo 扫描任务已排队: {task.id} 用于项目 {service_name}")
+
+            # 返回成功响应
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "accepted",
+                    "task_id": task.id,
+                    "request_id": request_id,
+                    "event_type": event_type,
+                    "message": f"项目 {service_name} 的提交 {commit_id[:8]} 的 JaCoCo 扫描任务已成功排队",
+                    "extracted_info": {
+                        "repo_url": repo_url,
+                        "commit_id": commit_id,
+                        "branch_name": branch_name,
+                        "service_name": service_name
+                    }
                 }
-            }
-        )
+            )
 
     except HTTPException:
         raise

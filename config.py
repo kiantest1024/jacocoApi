@@ -48,6 +48,7 @@ DEFAULT_SCAN_CONFIG: Dict[str, Any] = {
     "report_formats": ["xml", "html", "json"],
     "use_docker": False,  # 禁用Docker
     "force_local_scan": True,  # 强制本地扫描
+    "sync_mode": True,  # 启用同步模式用于调试
     "use_incremental_update": True,
     "scan_timeout": 1800,
     "max_retries": 3,

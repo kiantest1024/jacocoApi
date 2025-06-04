@@ -454,21 +454,34 @@ async def webhook_handler_no_auth(request: Request):
                 logger.info(f"[{request_id}] 同步扫描完成")
 
                 # 返回扫描结果
+                response_content = {
+                    "status": "completed",
+                    "request_id": request_id,
+                    "event_type": event_type,
+                    "message": f"项目 {service_name} 的提交 {commit_id[:8]} 的 JaCoCo 扫描已完成（同步）",
+                    "extracted_info": {
+                        "repo_url": repo_url,
+                        "commit_id": commit_id,
+                        "branch_name": branch_name,
+                        "service_name": service_name
+                    }
+                }
+
+                # 添加扫描结果
+                if scan_result:
+                    response_content.update(scan_result)
+
+                # 确保通知状态在响应中
+                if 'notification_sent' not in response_content:
+                    response_content['notification_sent'] = False
+                    response_content['notification_status'] = 'unknown'
+
+                logger.info(f"[{request_id}] 同步扫描完成，返回响应")
+                logger.info(f"[{request_id}] 响应中的通知状态: notification_sent={response_content.get('notification_sent', 'N/A')}")
+
                 return JSONResponse(
                     status_code=200,
-                    content={
-                        "status": "completed",
-                        "request_id": request_id,
-                        "event_type": event_type,
-                        "message": f"项目 {service_name} 的提交 {commit_id[:8]} 的 JaCoCo 扫描已完成",
-                        "extracted_info": {
-                            "repo_url": repo_url,
-                            "commit_id": commit_id,
-                            "branch_name": branch_name,
-                            "service_name": service_name
-                        },
-                        **scan_result
-                    }
+                    content=response_content
                 )
 
             except Exception as e:

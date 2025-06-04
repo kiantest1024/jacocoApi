@@ -101,9 +101,10 @@ class FeishuNotifier:
         """构建 JaCoCo 报告消息。"""
         
         # 提取覆盖率数据
-        line_coverage = coverage_data.get('line_coverage', 0)
-        branch_coverage = coverage_data.get('branch_coverage', 0)
         instruction_coverage = coverage_data.get('instruction_coverage', 0)
+        branch_coverage = coverage_data.get('branch_coverage', 0)
+        line_coverage = coverage_data.get('line_coverage', 0)
+        complexity_coverage = coverage_data.get('complexity_coverage', 0)
         method_coverage = coverage_data.get('method_coverage', 0)
         class_coverage = coverage_data.get('class_coverage', 0)
         
@@ -151,7 +152,7 @@ class FeishuNotifier:
                         "tag": "div",
                         "text": {
                             "tag": "lark_md",
-                            "content": f"## 📈 覆盖率统计\n\n**整体评级**: {coverage_level}\n\n**详细数据**:\n- 🎯 **行覆盖率**: {line_coverage:.1f}%\n- 🌿 **分支覆盖率**: {branch_coverage:.1f}%\n- ⚡ **指令覆盖率**: {instruction_coverage:.1f}%\n- 🔧 **方法覆盖率**: {method_coverage:.1f}%\n- 📦 **类覆盖率**: {class_coverage:.1f}%"
+                            "content": f"## 📈 覆盖率统计\n\n**整体评级**: {coverage_level}\n\n**详细数据**:\n- ⚡ **指令覆盖率**: {instruction_coverage:.1f}%\n- 🌿 **分支覆盖率**: {branch_coverage:.1f}%\n- 🎯 **行覆盖率**: {line_coverage:.1f}%\n- 🔄 **圈复杂度覆盖率**: {complexity_coverage:.1f}%\n- 🔧 **方法覆盖率**: {method_coverage:.1f}%\n- 📦 **类覆盖率**: {class_coverage:.1f}%"
                         }
                     }
                 ]

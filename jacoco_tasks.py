@@ -123,9 +123,10 @@ def run_jacoco_scan_docker(
     else:
         # 如果没有coverage_summary，创建一个默认的（可能是0%覆盖率）
         coverage_summary = {
-            "line_coverage": scan_result.get('line_coverage', scan_result.get('coverage_percentage', 0)),
-            "branch_coverage": scan_result.get('branch_coverage', 0),
             "instruction_coverage": scan_result.get('instruction_coverage', 0),
+            "branch_coverage": scan_result.get('branch_coverage', 0),
+            "line_coverage": scan_result.get('line_coverage', scan_result.get('coverage_percentage', 0)),
+            "complexity_coverage": scan_result.get('complexity_coverage', 0),
             "method_coverage": scan_result.get('method_coverage', 0),
             "class_coverage": scan_result.get('class_coverage', 0)
         }
@@ -325,43 +326,77 @@ def parse_jacoco_reports(reports_dir: str, request_id: str) -> Dict[str, Any]:
 def parse_jacoco_xml_file(xml_path: str, request_id: str) -> Dict[str, Any]:
     try:
         logger.info(f"[{request_id}] Parsing JaCoCo XML file: {xml_path}")
-        
+
         tree = ET.parse(xml_path)
         root = tree.getroot()
-        
-        total_lines = 0
-        covered_lines = 0
-        total_branches = 0
-        covered_branches = 0
-        
+
+        # 初始化所有覆盖率指标
+        counters = {
+            "INSTRUCTION": {"missed": 0, "covered": 0},
+            "BRANCH": {"missed": 0, "covered": 0},
+            "LINE": {"missed": 0, "covered": 0},
+            "COMPLEXITY": {"missed": 0, "covered": 0},
+            "METHOD": {"missed": 0, "covered": 0},
+            "CLASS": {"missed": 0, "covered": 0}
+        }
+
+        # 解析所有counter元素
         for counter in root.findall(".//counter"):
             counter_type = counter.get("type")
             missed = int(counter.get("missed", 0))
             covered = int(counter.get("covered", 0))
-            
-            if counter_type == "LINE":
-                total_lines += missed + covered
-                covered_lines += covered
-            elif counter_type == "BRANCH":
-                total_branches += missed + covered
-                covered_branches += covered
-        
-        line_coverage = (covered_lines / total_lines * 100) if total_lines > 0 else 0
-        branch_coverage = (covered_branches / total_branches * 100) if total_branches > 0 else 0
-        
+
+            if counter_type in counters:
+                counters[counter_type]["missed"] += missed
+                counters[counter_type]["covered"] += covered
+
+        # 计算各项覆盖率
+        def calculate_coverage(counter_data):
+            total = counter_data["missed"] + counter_data["covered"]
+            return (counter_data["covered"] / total * 100) if total > 0 else 0
+
+        instruction_coverage = calculate_coverage(counters["INSTRUCTION"])
+        branch_coverage = calculate_coverage(counters["BRANCH"])
+        line_coverage = calculate_coverage(counters["LINE"])
+        complexity_coverage = calculate_coverage(counters["COMPLEXITY"])
+        method_coverage = calculate_coverage(counters["METHOD"])
+        class_coverage = calculate_coverage(counters["CLASS"])
+
         result = {
-            "coverage_percentage": round(line_coverage, 2),
-            "line_coverage": round(line_coverage, 2),
+            # 主要覆盖率指标
+            "coverage_percentage": round(line_coverage, 2),  # 保持向后兼容
+            "instruction_coverage": round(instruction_coverage, 2),
             "branch_coverage": round(branch_coverage, 2),
-            "lines_covered": covered_lines,
-            "lines_total": total_lines,
-            "branches_covered": covered_branches,
-            "branches_total": total_branches
+            "line_coverage": round(line_coverage, 2),
+            "complexity_coverage": round(complexity_coverage, 2),
+            "method_coverage": round(method_coverage, 2),
+            "class_coverage": round(class_coverage, 2),
+
+            # 详细统计数据
+            "instructions_covered": counters["INSTRUCTION"]["covered"],
+            "instructions_total": counters["INSTRUCTION"]["missed"] + counters["INSTRUCTION"]["covered"],
+            "branches_covered": counters["BRANCH"]["covered"],
+            "branches_total": counters["BRANCH"]["missed"] + counters["BRANCH"]["covered"],
+            "lines_covered": counters["LINE"]["covered"],
+            "lines_total": counters["LINE"]["missed"] + counters["LINE"]["covered"],
+            "complexity_covered": counters["COMPLEXITY"]["covered"],
+            "complexity_total": counters["COMPLEXITY"]["missed"] + counters["COMPLEXITY"]["covered"],
+            "methods_covered": counters["METHOD"]["covered"],
+            "methods_total": counters["METHOD"]["missed"] + counters["METHOD"]["covered"],
+            "classes_covered": counters["CLASS"]["covered"],
+            "classes_total": counters["CLASS"]["missed"] + counters["CLASS"]["covered"]
         }
-        
-        logger.info(f"[{request_id}] JaCoCo XML parsing completed - Line coverage: {line_coverage:.2f}%")
+
+        logger.info(f"[{request_id}] JaCoCo XML parsing completed:")
+        logger.info(f"[{request_id}]   指令覆盖率: {instruction_coverage:.2f}%")
+        logger.info(f"[{request_id}]   分支覆盖率: {branch_coverage:.2f}%")
+        logger.info(f"[{request_id}]   行覆盖率: {line_coverage:.2f}%")
+        logger.info(f"[{request_id}]   圈复杂度覆盖率: {complexity_coverage:.2f}%")
+        logger.info(f"[{request_id}]   方法覆盖率: {method_coverage:.2f}%")
+        logger.info(f"[{request_id}]   类覆盖率: {class_coverage:.2f}%")
+
         return result
-        
+
     except Exception as e:
         logger.error(f"[{request_id}] Failed to parse JaCoCo XML: {str(e)}")
         raise Exception(f"Failed to parse JaCoCo XML: {str(e)}")
@@ -594,9 +629,10 @@ def _run_local_scan(
 
                     # 创建coverage_summary用于通知
                     scan_result["coverage_summary"] = {
-                        "line_coverage": scan_result.get('line_coverage', 0),
-                        "branch_coverage": scan_result.get('branch_coverage', 0),
                         "instruction_coverage": scan_result.get('instruction_coverage', 0),
+                        "branch_coverage": scan_result.get('branch_coverage', 0),
+                        "line_coverage": scan_result.get('line_coverage', 0),
+                        "complexity_coverage": scan_result.get('complexity_coverage', 0),
                         "method_coverage": scan_result.get('method_coverage', 0),
                         "class_coverage": scan_result.get('class_coverage', 0)
                     }
@@ -618,15 +654,24 @@ def _run_local_scan(
                 "html_report_available": False,
                 "summary_available": False,
                 "coverage_percentage": 0,
-                "line_coverage": 0,
-                "branch_coverage": 0,
                 "instruction_coverage": 0,
+                "branch_coverage": 0,
+                "line_coverage": 0,
+                "complexity_coverage": 0,
                 "method_coverage": 0,
                 "class_coverage": 0,
+                "instructions_covered": 0,
+                "instructions_total": 0,
+                "branches_covered": 0,
+                "branches_total": 0,
                 "lines_covered": 0,
                 "lines_total": 0,
-                "branches_covered": 0,
-                "branches_total": 0
+                "complexity_covered": 0,
+                "complexity_total": 0,
+                "methods_covered": 0,
+                "methods_total": 0,
+                "classes_covered": 0,
+                "classes_total": 0
             })
             logger.info(f"[{request_id}] 设置默认覆盖率数据（0%）")
 

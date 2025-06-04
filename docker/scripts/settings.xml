@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 
+          http://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+    <!-- 本地仓库路径 -->
+    <localRepository>/root/.m2/repository</localRepository>
+
+    <!-- 镜像配置 -->
+    <mirrors>
+        <!-- 阿里云镜像 -->
+        <mirror>
+            <id>aliyun-central</id>
+            <mirrorOf>central</mirrorOf>
+            <name>Aliyun Central</name>
+            <url>https://maven.aliyun.com/repository/central</url>
+        </mirror>
+        
+        <!-- 阿里云公共仓库 -->
+        <mirror>
+            <id>aliyun-public</id>
+            <mirrorOf>*</mirrorOf>
+            <name>Aliyun Public</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+        </mirror>
+    </mirrors>
+
+    <!-- 配置文件 -->
+    <profiles>
+        <profile>
+            <id>default</id>
+            <repositories>
+                <!-- Maven中央仓库 -->
+                <repository>
+                    <id>central</id>
+                    <name>Maven Central Repository</name>
+                    <url>https://repo1.maven.org/maven2</url>
+                    <layout>default</layout>
+                    <snapshots>
+                        <enabled>false</enabled>
+                    </snapshots>
+                </repository>
+                
+                <!-- 阿里云仓库 -->
+                <repository>
+                    <id>aliyun</id>
+                    <name>Aliyun Repository</name>
+                    <url>https://maven.aliyun.com/repository/public</url>
+                    <layout>default</layout>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                </repository>
+                
+                <!-- Spring仓库 -->
+                <repository>
+                    <id>spring-releases</id>
+                    <name>Spring Releases</name>
+                    <url>https://repo.spring.io/release</url>
+                    <snapshots>
+                        <enabled>false</enabled>
+                    </snapshots>
+                </repository>
+            </repositories>
+            
+            <pluginRepositories>
+                <!-- Maven中央插件仓库 -->
+                <pluginRepository>
+                    <id>central</id>
+                    <name>Maven Plugin Repository</name>
+                    <url>https://repo1.maven.org/maven2</url>
+                    <layout>default</layout>
+                    <snapshots>
+                        <enabled>false</enabled>
+                    </snapshots>
+                </pluginRepository>
+                
+                <!-- 阿里云插件仓库 -->
+                <pluginRepository>
+                    <id>aliyun-plugin</id>
+                    <name>Aliyun Plugin Repository</name>
+                    <url>https://maven.aliyun.com/repository/public</url>
+                    <snapshots>
+                        <enabled>true</enabled>
+                    </snapshots>
+                </pluginRepository>
+            </pluginRepositories>
+        </profile>
+    </profiles>
+
+    <!-- 激活配置文件 -->
+    <activeProfiles>
+        <activeProfile>default</activeProfile>
+    </activeProfiles>
+
+</settings>

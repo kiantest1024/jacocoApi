@@ -82,12 +82,20 @@ echo "找到Maven项目，开始增强pom.xml..."
 
 echo "运行Maven测试和JaCoCo..."
 
+# 设置Maven环境变量 (移除已废弃的MaxPermSize参数)
+export MAVEN_OPTS="-Xmx2g -XX:MetaspaceSize=512m"
+export JAVA_OPTS="-Xmx2g"
+
 # 运行Maven命令
 mvn clean compile test-compile test jacoco:report \
     -Dmaven.test.failure.ignore=true \
     -Dproject.build.sourceEncoding=UTF-8 \
     -Dmaven.compiler.source=11 \
-    -Dmaven.compiler.target=11
+    -Dmaven.compiler.target=11 \
+    -Dmaven.resolver.transport=wagon \
+    -Dmaven.wagon.http.retryHandler.count=3 \
+    -Dmaven.wagon.http.pool=false \
+    -U
 
 # 检查并复制报告
 if [[ -f "target/site/jacoco/jacoco.xml" ]]; then

@@ -22,8 +22,12 @@ COPY scripts/ /app/scripts/
 # 设置脚本执行权限
 RUN chmod +x /app/scripts/*.sh
 
-# 设置环境变量
-ENV MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512m"
+# 创建Maven配置目录并复制settings.xml
+RUN mkdir -p /root/.m2
+COPY scripts/settings.xml /root/.m2/settings.xml
+
+# 设置环境变量 (移除已废弃的MaxPermSize参数)
+ENV MAVEN_OPTS="-Xmx2g -XX:MetaspaceSize=512m"
 ENV JAVA_OPTS="-Xmx2g"
 
 # 默认命令

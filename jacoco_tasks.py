@@ -488,7 +488,11 @@ def _run_local_scan(
             "-Dmaven.test.failure.ignore=true",
             "-Dproject.build.sourceEncoding=UTF-8",
             "-Dmaven.compiler.source=11",
-            "-Dmaven.compiler.target=11"
+            "-Dmaven.compiler.target=11",
+            "-Dmaven.resolver.transport=wagon",  # 使用wagon传输
+            "-Dmaven.wagon.http.retryHandler.count=3",  # 重试次数
+            "-Dmaven.wagon.http.pool=false",  # 禁用连接池
+            "-U"  # 强制更新依赖
         ]
 
         result = subprocess.run(
@@ -502,6 +506,48 @@ def _run_local_scan(
         logger.info(f"[{request_id}] Maven执行完成，返回码: {result.returncode}")
         logger.info(f"[{request_id}] Maven输出:\n{result.stdout}")
         logger.info(f"[{request_id}] Maven错误:\n{result.stderr}")
+
+        # 检查是否是依赖解析问题并尝试回退方案
+        if result.returncode != 0 and "Non-resolvable parent POM" in result.stdout:
+            logger.warning(f"[{request_id}] 检测到父POM解析问题，尝试跳过父POM验证...")
+
+            # 尝试跳过父POM验证的扫描
+            maven_cmd_fallback = [
+                "mvn", "clean", "compile", "test-compile",
+                "org.jacoco:jacoco-maven-plugin:prepare-agent",
+                "test",
+                "org.jacoco:jacoco-maven-plugin:report",
+                "-Dmaven.test.failure.ignore=true",
+                "-Dproject.build.sourceEncoding=UTF-8",
+                "-Dmaven.compiler.source=11",
+                "-Dmaven.compiler.target=11",
+                "-Dcheckstyle.skip=true",  # 跳过代码检查
+                "-Dpmd.skip=true",  # 跳过PMD检查
+                "-Dspotbugs.skip=true",  # 跳过SpotBugs检查
+                "-DskipTests=false",  # 确保运行测试
+                "-U"
+            ]
+
+            logger.info(f"[{request_id}] 尝试回退方案...")
+            try:
+                result_fallback = subprocess.run(
+                    maven_cmd_fallback,
+                    cwd=repo_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=600
+                )
+
+                logger.info(f"[{request_id}] 回退方案执行完成，返回码: {result_fallback.returncode}")
+                if result_fallback.returncode == 0:
+                    logger.info(f"[{request_id}] 回退方案成功")
+                    result = result_fallback  # 使用回退方案的结果
+                else:
+                    logger.warning(f"[{request_id}] 回退方案也失败: {result_fallback.stdout}")
+            except subprocess.TimeoutExpired:
+                logger.warning(f"[{request_id}] 回退方案超时")
+            except Exception as e:
+                logger.warning(f"[{request_id}] 回退方案异常: {e}")
 
         # 7. 检查target目录内容
         target_dir = os.path.join(repo_dir, "target")

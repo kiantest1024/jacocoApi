@@ -177,60 +177,96 @@ def enhance_pom_for_jacoco(pom_path):
     """增强pom.xml以支持JaCoCo"""
     tree = ET.parse(pom_path)
     root = tree.getroot()
-    
+
     # 获取命名空间
     namespace = ''
     if root.tag.startswith('{'):
         namespace = root.tag[1:root.tag.index('}')]
-    
-    # 注册命名空间
-    if namespace:
         ET.register_namespace('', namespace)
-    
-    # 查找或创建properties
-    properties = root.find('.//properties')
+
+    # 查找properties节点（直接子节点，避免重复）
+    properties = None
+    for child in root:
+        if child.tag.endswith('properties'):
+            properties = child
+            print("  ✅ 找到现有properties节点")
+            break
+
     if properties is None:
-        properties = ET.SubElement(root, 'properties')
-    
-    # 添加JaCoCo版本
-    jacoco_version = properties.find('jacoco.version')
-    if jacoco_version is None:
+        # 在适当位置插入properties节点
+        insert_index = 0
+        for i, child in enumerate(root):
+            if child.tag.endswith(('groupId', 'artifactId', 'version', 'packaging')):
+                insert_index = i + 1
+
+        properties = ET.Element('properties')
+        root.insert(insert_index, properties)
+        print("  ✅ 创建properties节点")
+
+    # 添加JaCoCo版本属性
+    jacoco_version_found = False
+    for prop in properties:
+        if prop.tag == 'jacoco.version':
+            jacoco_version_found = True
+            print("  ✅ JaCoCo版本属性已存在")
+            break
+
+    if not jacoco_version_found:
         jacoco_version = ET.SubElement(properties, 'jacoco.version')
         jacoco_version.text = '0.8.7'
-    
-    # 查找或创建build
-    build = root.find('.//build')
+        print("  ✅ 添加JaCoCo版本属性")
+
+    # 查找build节点
+    build = None
+    for child in root:
+        if child.tag.endswith('build'):
+            build = child
+            print("  ✅ 找到现有build节点")
+            break
+
     if build is None:
         build = ET.SubElement(root, 'build')
-    
-    # 查找或创建plugins
-    plugins = build.find('.//plugins')
+        print("  ✅ 创建build节点")
+
+    # 查找plugins节点
+    plugins = None
+    for child in build:
+        if child.tag.endswith('plugins'):
+            plugins = child
+            print("  ✅ 找到现有plugins节点")
+            break
+
     if plugins is None:
         plugins = ET.SubElement(build, 'plugins')
-    
+        print("  ✅ 创建plugins节点")
+
     # 检查是否已有JaCoCo插件
-    jacoco_exists = False
-    for plugin in plugins.findall('.//plugin'):
-        artifact_id = plugin.find('.//artifactId')
-        if artifact_id is not None and artifact_id.text == 'jacoco-maven-plugin':
-            jacoco_exists = True
-            break
-    
-    if not jacoco_exists:
+    jacoco_plugin_exists = False
+    for plugin in plugins:
+        if plugin.tag.endswith('plugin'):
+            for child in plugin:
+                if child.tag.endswith('artifactId') and child.text == 'jacoco-maven-plugin':
+                    jacoco_plugin_exists = True
+                    print("  ✅ JaCoCo插件已存在")
+                    break
+            if jacoco_plugin_exists:
+                break
+
+    if not jacoco_plugin_exists:
         # 添加JaCoCo插件
         jacoco_plugin = ET.SubElement(plugins, 'plugin')
-        
+
         group_id = ET.SubElement(jacoco_plugin, 'groupId')
         group_id.text = 'org.jacoco'
-        
+
         artifact_id = ET.SubElement(jacoco_plugin, 'artifactId')
         artifact_id.text = 'jacoco-maven-plugin'
-        
+
         version = ET.SubElement(jacoco_plugin, 'version')
         version.text = '${jacoco.version}'
-        
+
         executions = ET.SubElement(jacoco_plugin, 'executions')
-        
+
         # prepare-agent
         execution1 = ET.SubElement(executions, 'execution')
         ex1_id = ET.SubElement(execution1, 'id')
@@ -238,7 +274,7 @@ def enhance_pom_for_jacoco(pom_path):
         goals1 = ET.SubElement(execution1, 'goals')
         goal1 = ET.SubElement(goals1, 'goal')
         goal1.text = 'prepare-agent'
-        
+
         # report
         execution2 = ET.SubElement(executions, 'execution')
         ex2_id = ET.SubElement(execution2, 'id')
@@ -248,7 +284,9 @@ def enhance_pom_for_jacoco(pom_path):
         goals2 = ET.SubElement(execution2, 'goals')
         goal2 = ET.SubElement(goals2, 'goal')
         goal2.text = 'report'
-    
+
+        print("  ✅ 添加JaCoCo插件配置")
+
     # 写回文件
     tree.write(pom_path, encoding='utf-8', xml_declaration=True)
 
@@ -275,7 +313,7 @@ def find_jacoco_files(repo_dir):
     """查找JaCoCo相关文件"""
     jacoco_files = []
     
-    for root, dirs, files in os.walk(repo_dir):
+    for root, _, files in os.walk(repo_dir):
         for file in files:
             if 'jacoco' in file.lower() or file.endswith('.exec'):
                 jacoco_files.append(os.path.join(root, file))

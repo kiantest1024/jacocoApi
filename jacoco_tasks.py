@@ -345,9 +345,15 @@ def _run_local_scan(
         shutil.copy2(pom_path, pom_backup)
 
         try:
-            enhance_pom_for_jacoco(pom_path, request_id)
+            enhance_pom_simple(pom_path, request_id)
         except Exception as e:
             logger.warning(f"[{request_id}] pom.xml增强失败: {str(e)}")
+            # 如果增强失败，恢复备份
+            try:
+                shutil.copy2(pom_backup, pom_path)
+                logger.info(f"[{request_id}] 已恢复原始pom.xml")
+            except Exception as restore_error:
+                logger.error(f"[{request_id}] 恢复pom.xml失败: {restore_error}")
 
         # 5. 运行Maven测试和JaCoCo
         logger.info(f"[{request_id}] 运行Maven测试和JaCoCo...")
@@ -462,6 +468,116 @@ def _run_local_scan(
         except Exception as cleanup_error:
             logger.warning(f"[{request_id}] 清理失败: {cleanup_error}")
 
+def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
+    """
+    使用字符串替换简单增强pom.xml
+    """
+    try:
+        import re
+
+        logger.info(f"[{request_id}] 读取pom.xml...")
+
+        # 读取pom.xml
+        with open(pom_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        logger.info(f"[{request_id}] 原始pom.xml大小: {len(content)} 字符")
+
+        # 检查是否已有JaCoCo插件
+        if 'jacoco-maven-plugin' in content:
+            logger.info(f"[{request_id}] JaCoCo插件已存在，跳过增强")
+            return True
+
+        # 添加JaCoCo属性
+        jacoco_property = '<jacoco.version>0.8.7</jacoco.version>'
+
+        if '<properties>' in content and jacoco_property not in content:
+            # 在现有properties中添加
+            content = content.replace(
+                '<properties>',
+                f'<properties>\n        {jacoco_property}'
+            )
+            logger.info(f"[{request_id}] 在现有properties中添加JaCoCo版本")
+        elif '<properties>' not in content:
+            # 创建properties节点
+            # 在</version>后添加properties
+            version_pattern = r'(\s*</version>\s*)'
+            if re.search(version_pattern, content):
+                properties_block = f'''
+    <properties>
+        {jacoco_property}
+    </properties>'''
+                content = re.sub(version_pattern, r'\1' + properties_block, content, count=1)
+                logger.info(f"[{request_id}] 创建properties节点并添加JaCoCo版本")
+
+        # 添加JaCoCo插件
+        jacoco_plugin = '''
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>'''
+
+        if '<plugins>' in content:
+            # 在现有plugins中添加
+            content = content.replace(
+                '<plugins>',
+                f'<plugins>{jacoco_plugin}'
+            )
+            logger.info(f"[{request_id}] 在现有plugins中添加JaCoCo插件")
+        elif '<build>' in content:
+            # 在build中创建plugins
+            plugins_block = f'''
+        <plugins>{jacoco_plugin}
+        </plugins>'''
+            content = content.replace(
+                '<build>',
+                f'<build>{plugins_block}'
+            )
+            logger.info(f"[{request_id}] 在build中创建plugins并添加JaCoCo插件")
+        else:
+            # 创建完整的build节点
+            build_block = f'''
+    <build>
+        <plugins>{jacoco_plugin}
+        </plugins>
+    </build>'''
+            # 在</dependencies>后或</properties>后添加
+            if '</dependencies>' in content:
+                content = content.replace('</dependencies>', f'</dependencies>{build_block}')
+            elif '</properties>' in content:
+                content = content.replace('</properties>', f'</properties>{build_block}')
+            else:
+                # 在</project>前添加
+                content = content.replace('</project>', f'{build_block}\n</project>')
+            logger.info(f"[{request_id}] 创建完整的build节点并添加JaCoCo插件")
+
+        # 写回文件
+        with open(pom_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        logger.info(f"[{request_id}] pom.xml增强完成，新大小: {len(content)} 字符")
+        return True
+
+    except Exception as e:
+        logger.error(f"[{request_id}] pom.xml增强失败: {e}")
+        return False
+
 def enhance_pom_for_jacoco(pom_path: str, request_id: str):
     """增强pom.xml以支持JaCoCo"""
     try:
@@ -477,47 +593,76 @@ def enhance_pom_for_jacoco(pom_path: str, request_id: str):
         namespace = ''
         if root.tag.startswith('{'):
             namespace = root.tag[1:root.tag.index('}')]
-
-        # 注册命名空间
-        if namespace:
             ET.register_namespace('', namespace)
-            ns = {'maven': namespace}
-        else:
-            ns = {}
 
-        # 查找或创建properties
-        properties = root.find('.//properties' if not namespace else './/maven:properties', ns)
+        # 查找properties节点（直接子节点，避免重复）
+        properties = None
+        for child in root:
+            if child.tag.endswith('properties'):
+                properties = child
+                logger.info(f"[{request_id}] 找到现有properties节点")
+                break
+
         if properties is None:
-            properties = ET.SubElement(root, 'properties')
+            # 在适当位置插入properties节点
+            # 通常在groupId, artifactId, version之后，dependencies之前
+            insert_index = 0
+            for i, child in enumerate(root):
+                if child.tag.endswith(('groupId', 'artifactId', 'version', 'packaging')):
+                    insert_index = i + 1
+
+            properties = ET.Element('properties')
+            root.insert(insert_index, properties)
             logger.info(f"[{request_id}] 创建properties节点")
 
         # 添加JaCoCo版本属性
-        jacoco_version = properties.find('jacoco.version')
-        if jacoco_version is None:
+        jacoco_version_found = False
+        for prop in properties:
+            if prop.tag == 'jacoco.version':
+                jacoco_version_found = True
+                logger.info(f"[{request_id}] JaCoCo版本属性已存在")
+                break
+
+        if not jacoco_version_found:
             jacoco_version = ET.SubElement(properties, 'jacoco.version')
             jacoco_version.text = '0.8.7'
             logger.info(f"[{request_id}] 添加JaCoCo版本属性")
 
-        # 查找或创建build
-        build = root.find('.//build' if not namespace else './/maven:build', ns)
+        # 查找build节点
+        build = None
+        for child in root:
+            if child.tag.endswith('build'):
+                build = child
+                logger.info(f"[{request_id}] 找到现有build节点")
+                break
+
         if build is None:
             build = ET.SubElement(root, 'build')
             logger.info(f"[{request_id}] 创建build节点")
 
-        # 查找或创建plugins
-        plugins = build.find('.//plugins' if not namespace else './/maven:plugins', ns)
+        # 查找plugins节点
+        plugins = None
+        for child in build:
+            if child.tag.endswith('plugins'):
+                plugins = child
+                logger.info(f"[{request_id}] 找到现有plugins节点")
+                break
+
         if plugins is None:
             plugins = ET.SubElement(build, 'plugins')
             logger.info(f"[{request_id}] 创建plugins节点")
 
         # 检查是否已有JaCoCo插件
         jacoco_plugin_exists = False
-        for plugin in plugins.findall('.//plugin' if not namespace else './/maven:plugin', ns):
-            artifact_id = plugin.find('.//artifactId' if not namespace else './/maven:artifactId', ns)
-            if artifact_id is not None and artifact_id.text == 'jacoco-maven-plugin':
-                jacoco_plugin_exists = True
-                logger.info(f"[{request_id}] JaCoCo插件已存在")
-                break
+        for plugin in plugins:
+            if plugin.tag.endswith('plugin'):
+                for child in plugin:
+                    if child.tag.endswith('artifactId') and child.text == 'jacoco-maven-plugin':
+                        jacoco_plugin_exists = True
+                        logger.info(f"[{request_id}] JaCoCo插件已存在")
+                        break
+                if jacoco_plugin_exists:
+                    break
 
         if not jacoco_plugin_exists:
             # 添加JaCoCo插件

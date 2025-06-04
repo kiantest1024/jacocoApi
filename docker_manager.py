@@ -128,12 +128,33 @@ class DockerContainerManager:
             
             logger.info(f"[{request_id}] 在共享容器中执行扫描...")
             
-            # 在容器中执行扫描脚本
-            docker_exec_cmd = [
+            # 检查扫描脚本是否存在，如果不存在则使用传统扫描脚本
+            script_check_cmd = [
                 "docker", "exec", self.container_id,
-                "/app/scripts/shared_scan.sh",
-                f"/app/shared_work/task_{request_id}/task_config.json"
+                "test", "-f", "/app/scripts/shared_scan.sh"
             ]
+
+            script_exists = subprocess.run(script_check_cmd, capture_output=True, timeout=10)
+
+            if script_exists.returncode == 0:
+                # 使用共享扫描脚本
+                docker_exec_cmd = [
+                    "docker", "exec", self.container_id,
+                    "/app/scripts/shared_scan.sh",
+                    f"/app/shared_work/task_{request_id}/task_config.json"
+                ]
+                logger.info(f"[{request_id}] 使用共享扫描脚本")
+            else:
+                # 回退到传统扫描脚本
+                docker_exec_cmd = [
+                    "docker", "exec", self.container_id,
+                    "/app/scripts/scan.sh",
+                    "--repo-url", repo_url,
+                    "--commit-id", commit_id,
+                    "--branch", branch_name,
+                    "--service-name", service_name
+                ]
+                logger.warning(f"[{request_id}] 共享扫描脚本不存在，使用传统扫描脚本")
             
             result = subprocess.run(
                 docker_exec_cmd,
@@ -147,6 +168,55 @@ class DockerContainerManager:
             if os.path.exists(result_file):
                 with open(result_file, 'r') as f:
                     scan_result = json.load(f)
+
+                # 如果使用传统扫描脚本，需要手动处理报告
+                if script_exists.returncode != 0:
+                    logger.info(f"[{request_id}] 处理传统扫描结果")
+
+                    # 检查容器内的报告目录
+                    report_check_cmd = [
+                        "docker", "exec", self.container_id,
+                        "find", "/app/reports", "-name", "jacoco.xml", "-type", "f"
+                    ]
+
+                    report_result = subprocess.run(report_check_cmd, capture_output=True, text=True, timeout=30)
+
+                    if report_result.returncode == 0 and report_result.stdout.strip():
+                        # 找到报告文件，复制到任务目录
+                        jacoco_xml = report_result.stdout.strip().split('\n')[0]  # 取第一个
+
+                        # 创建报告目录
+                        reports_dir = os.path.join(task_dir, "reports")
+                        os.makedirs(reports_dir, exist_ok=True)
+
+                        # 复制XML报告
+                        copy_cmd = [
+                            "docker", "cp",
+                            f"{self.container_id}:{jacoco_xml}",
+                            os.path.join(reports_dir, "jacoco.xml")
+                        ]
+                        subprocess.run(copy_cmd, capture_output=True, timeout=30)
+
+                        # 复制HTML报告目录
+                        html_dir = os.path.dirname(jacoco_xml)
+                        copy_html_cmd = [
+                            "docker", "cp",
+                            f"{self.container_id}:{html_dir}/.",
+                            reports_dir
+                        ]
+                        subprocess.run(copy_html_cmd, capture_output=True, timeout=30)
+
+                        # 更新扫描结果
+                        scan_result.update({
+                            "status": "completed",
+                            "reports_dir": reports_dir,
+                            "return_code": 0
+                        })
+
+                        logger.info(f"[{request_id}] 传统扫描报告复制完成")
+                    else:
+                        logger.warning(f"[{request_id}] 传统扫描未找到报告文件")
+
             else:
                 scan_result = {
                     "status": "failed",

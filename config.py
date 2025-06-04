@@ -76,7 +76,7 @@ def get_service_config(repo_url: str, project_name: str = None) -> Dict[str, Any
     
     return config
 
-def is_supported_project_type(repo_url: str) -> bool:
+def is_supported_project_type(_: str) -> bool:
     return True
 
 def get_available_repos() -> List[str]:

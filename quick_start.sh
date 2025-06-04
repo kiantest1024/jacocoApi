@@ -95,10 +95,10 @@ sleep 3
 echo "启动 FastAPI 服务器..."
 echo
 echo "服务将在以下地址启动:"
-echo "  - API 服务: http://localhost:8001"
-echo "  - API 文档: http://localhost:8001/docs"
-echo "  - 健康检查: http://localhost:8001/health"
-echo "  - GitHub Webhook: http://localhost:8001/github/webhook"
+echo "  - API 服务: http://localhost:8002"
+echo "  - API 文档: http://localhost:8002/docs"
+echo "  - 健康检查: http://localhost:8002/health"
+echo "  - GitHub Webhook: http://localhost:8002/github/webhook"
 echo
 echo "按 Ctrl+C 停止服务"
 echo
@@ -123,7 +123,7 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # 启动 FastAPI 服务器
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+python3 -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload
 
 # 如果到达这里，说明服务器正常退出
 cleanup

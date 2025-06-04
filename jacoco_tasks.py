@@ -143,7 +143,7 @@ def run_jacoco_scan_docker(
             
             report_files = []
             if os.path.exists(abs_reports_dir):
-                for root, dirs, files in os.walk(abs_reports_dir):
+                for root, _, files in os.walk(abs_reports_dir):
                     for file in files:
                         if file.endswith(('.xml', '.html', '.json')):
                             report_files.append(os.path.join(root, file))
@@ -151,28 +151,12 @@ def run_jacoco_scan_docker(
             if report_files:
                 try:
                     parsed_reports = parse_jacoco_reports(abs_reports_dir, request_id)
-                    scan_result = {
+                    return {
                         "status": "success",
                         "docker_output": result.stdout,
                         "report_files": report_files,
                         **parsed_reports
                     }
-
-                    webhook_url = service_config.get('notification_webhook')
-                    if webhook_url and 'coverage_summary' in parsed_reports:
-                        try:
-                            send_jacoco_notification(
-                                webhook_url=webhook_url,
-                                repo_url=repo_url,
-                                branch_name=branch_name,
-                                commit_id=commit_id,
-                                coverage_data=parsed_reports['coverage_summary'],
-                                service_name=service_config.get('service_name')
-                            )
-                        except Exception as e:
-                            logger.warning(f"[{request_id}] Failed to send notification: {str(e)}")
-
-                    return scan_result
                 except Exception as e:
                     logger.error(f"[{request_id}] Failed to parse reports: {str(e)}")
                     return {
@@ -191,19 +175,6 @@ def run_jacoco_scan_docker(
         else:
             logger.error(f"[{request_id}] Docker scan failed with return code {result.returncode}")
             logger.error(f"[{request_id}] Docker stderr: {result.stderr}")
-            
-            webhook_url = service_config.get('notification_webhook')
-            if webhook_url:
-                try:
-                    send_error_notification(
-                        webhook_url=webhook_url,
-                        repo_url=repo_url,
-                        error_message=f"Docker scan failed: {result.stderr}",
-                        service_name=service_config.get('service_name')
-                    )
-                except Exception as e:
-                    logger.error(f"[{request_id}] Failed to send error notification: {str(e)}")
-
             raise Exception(f"Docker scan failed with return code {result.returncode}: {result.stderr}")
 
     except subprocess.TimeoutExpired:

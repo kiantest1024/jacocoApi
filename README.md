@@ -108,19 +108,19 @@ quick_start.bat
 ./quick_start.sh
 
 # 或手动启动
-python -m uvicorn main:app --host 0.0.0.0 --port 8001
+python -m uvicorn main:app --host 0.0.0.0 --port 8002
 ```
 
 ### 4. 配置 Git Webhook
 
 #### GitHub Webhook
-- URL: `http://your-server:8001/github/webhook`
+- URL: `http://your-server:8002/github/webhook`
 - Content type: `application/json`
 - Secret: 在 `.env` 文件中配置
 - 事件: 选择 "Push events"
 
 #### GitLab Webhook
-- URL: `http://your-server:8001/github/webhook`
+- URL: `http://your-server:8002/github/webhook`
 - Content type: `application/json`
 - Secret Token: 在 `.env` 文件中配置
 - 触发器: 选择 "Push events"
@@ -324,10 +324,10 @@ python test-docker-scan.py
 python demo_test.py
 
 # 健康检查
-curl http://localhost:8001/health
+curl http://localhost:8002/health
 
 # 测试 webhook 端点
-curl http://localhost:8001/github/test
+curl http://localhost:8002/github/test
 ```
 
 ## � 使用示例
@@ -378,7 +378,7 @@ curl http://localhost:8001/github/test
 ## 🎉 功能状态
 
 ✅ **多平台支持**: GitHub 和 GitLab webhook
-✅ **服务运行**: 端口 8001
+✅ **服务运行**: 端口 8002
 ✅ **Docker 扫描器**: 已配置并可用
 ✅ **无侵入性**: 不修改原始 pom.xml
 ✅ **实时处理**: 支持异步任务队列
@@ -387,9 +387,9 @@ curl http://localhost:8001/github/test
 
 启动服务后，访问以下地址查看详细的 API 文档：
 
-- **Swagger UI**: <http://localhost:8001/docs>
-- **ReDoc**: <http://localhost:8001/redoc>
-- **OpenAPI JSON**: <http://localhost:8001/openapi.json>
+- **Swagger UI**: <http://localhost:8002/docs>
+- **ReDoc**: <http://localhost:8002/redoc>
+- **OpenAPI JSON**: <http://localhost:8002/openapi.json>
 
 ## 🔧 故障排除
 
@@ -407,10 +407,10 @@ curl http://localhost:8001/github/test
 2. **Webhook 接收失败**
    ```bash
    # 检查服务状态
-   curl http://localhost:8001/health
+   curl http://localhost:8002/health
 
    # 使用无认证端点测试
-   curl -X POST http://localhost:8001/github/webhook-no-auth \
+   curl -X POST http://localhost:8002/github/webhook-no-auth \
      -H "Content-Type: application/json" \
      -d '{"object_kind": "push", "ref": "refs/heads/main"}'
    ```

@@ -30,19 +30,16 @@ def verify_github_signature(payload_body: bytes, signature_header: str, secret: 
         return False
     
     try:
-        # GitHub 签名格式: sha256=<signature>
         hash_name, signature = signature_header.split('=', 1)
         if hash_name != 'sha256':
             return False
-        
-        # 计算预期签名
+
         expected_signature = hmac.new(
             secret.encode('utf-8'),
             payload_body,
             hashlib.sha256
         ).hexdigest()
-        
-        # 使用安全比较
+
         return hmac.compare_digest(signature, expected_signature)
     except Exception as e:
         logger.error(f"验证 GitHub 签名时出错: {str(e)}")

@@ -458,20 +458,36 @@ def _run_local_scan(
 
         has_main_code = False
         has_test_code = False
+        main_java_files = []
+        test_java_files = []
 
+        # 检查主代码
         if os.path.exists(src_main_java):
             for root, _, files in os.walk(src_main_java):
-                if any(f.endswith('.java') for f in files):
-                    has_main_code = True
-                    break
+                for file in files:
+                    if file.endswith('.java'):
+                        main_java_files.append(os.path.join(root, file))
+                        has_main_code = True
 
+        # 检查测试代码
         if os.path.exists(src_test_java):
             for root, _, files in os.walk(src_test_java):
-                if any(f.endswith('.java') for f in files):
-                    has_test_code = True
-                    break
+                for file in files:
+                    if file.endswith('.java'):
+                        test_java_files.append(os.path.join(root, file))
+                        has_test_code = True
 
         logger.info(f"[{request_id}] 源代码检查结果: 主代码={has_main_code}, 测试代码={has_test_code}")
+        logger.info(f"[{request_id}] 主代码文件数: {len(main_java_files)}")
+        logger.info(f"[{request_id}] 测试代码文件数: {len(test_java_files)}")
+
+        # 显示找到的文件（前3个）
+        if main_java_files:
+            sample_main = [os.path.relpath(f, repo_dir) for f in main_java_files[:3]]
+            logger.info(f"[{request_id}] 主代码示例: {sample_main}")
+        if test_java_files:
+            sample_test = [os.path.relpath(f, repo_dir) for f in test_java_files[:3]]
+            logger.info(f"[{request_id}] 测试代码示例: {sample_test}")
 
         if not has_main_code:
             logger.warning(f"[{request_id}] 项目没有主代码，将继续扫描但可能没有覆盖率数据")
@@ -497,18 +513,44 @@ def _run_local_scan(
         # 6. 运行Maven测试和JaCoCo
         logger.info(f"[{request_id}] 运行Maven测试和JaCoCo...")
 
-        maven_cmd = [
-            "mvn", "clean", "compile", "test-compile", "test",
-            "jacoco:report",
-            "-Dmaven.test.failure.ignore=true",
-            "-Dproject.build.sourceEncoding=UTF-8",
-            "-Dmaven.compiler.source=11",
-            "-Dmaven.compiler.target=11",
-            "-Dmaven.resolver.transport=wagon",  # 使用wagon传输
-            "-Dmaven.wagon.http.retryHandler.count=3",  # 重试次数
-            "-Dmaven.wagon.http.pool=false",  # 禁用连接池
-            "-U"  # 强制更新依赖
-        ]
+        # 根据项目是否有测试代码选择不同的Maven命令
+        if has_test_code:
+            logger.info(f"[{request_id}] 项目有测试代码，执行完整的测试和覆盖率扫描")
+            maven_cmd = [
+                "mvn", "clean", "compile", "test-compile",
+                "org.jacoco:jacoco-maven-plugin:0.8.7:prepare-agent",
+                "test",
+                "org.jacoco:jacoco-maven-plugin:0.8.7:report",
+                "-Dmaven.test.failure.ignore=true",
+                "-Dproject.build.sourceEncoding=UTF-8",
+                "-Dmaven.compiler.source=11",
+                "-Dmaven.compiler.target=11",
+                "-Dmaven.resolver.transport=wagon",
+                "-Dmaven.wagon.http.retryHandler.count=3",
+                "-Dmaven.wagon.http.pool=false",
+                "-DforkCount=1",  # 确保测试在单独进程中运行
+                "-DreuseForks=false",  # 每个测试类使用新的JVM
+                "-Dargline=-javaagent:${settings.localRepository}/org/jacoco/org.jacoco.agent/0.8.7/org.jacoco.agent-0.8.7-runtime.jar=destfile=target/jacoco.exec",
+                "-Djacoco.skip=false",  # 确保JaCoCo不被跳过
+                "-Dmaven.test.skip=false",  # 确保测试不被跳过
+                "-U"
+            ]
+        else:
+            logger.info(f"[{request_id}] 项目无测试代码，执行基本编译和JaCoCo设置")
+            maven_cmd = [
+                "mvn", "clean", "compile",
+                "org.jacoco:jacoco-maven-plugin:0.8.7:prepare-agent",
+                "org.jacoco:jacoco-maven-plugin:0.8.7:report",
+                "-Dmaven.test.failure.ignore=true",
+                "-Dproject.build.sourceEncoding=UTF-8",
+                "-Dmaven.compiler.source=11",
+                "-Dmaven.compiler.target=11",
+                "-Dmaven.resolver.transport=wagon",
+                "-Dmaven.wagon.http.retryHandler.count=3",
+                "-Dmaven.wagon.http.pool=false",
+                "-Djacoco.skip=false",
+                "-U"
+            ]
 
         result = subprocess.run(
             maven_cmd,
@@ -541,18 +583,40 @@ def _run_local_scan(
 
                     logger.info(f"[{request_id}] 创建独立pom.xml成功，重新尝试Maven扫描...")
 
-                    # 使用独立pom.xml重新扫描
-                    maven_cmd_independent = [
-                        "mvn", "clean", "compile", "test-compile", "test",
-                        "jacoco:report",
-                        "-Dmaven.test.failure.ignore=true",
-                        "-Dproject.build.sourceEncoding=UTF-8",
-                        "-Dmaven.compiler.source=11",
-                        "-Dmaven.compiler.target=11",
-                        "-Dcheckstyle.skip=true",
-                        "-Dpmd.skip=true",
-                        "-Dspotbugs.skip=true"
-                    ]
+                    # 使用独立pom.xml重新扫描 - 增强版本
+                    if has_test_code:
+                        maven_cmd_independent = [
+                            "mvn", "clean", "compile", "test-compile",
+                            "org.jacoco:jacoco-maven-plugin:0.8.7:prepare-agent",
+                            "test",
+                            "org.jacoco:jacoco-maven-plugin:0.8.7:report",
+                            "-Dmaven.test.failure.ignore=true",
+                            "-Dproject.build.sourceEncoding=UTF-8",
+                            "-Dmaven.compiler.source=11",
+                            "-Dmaven.compiler.target=11",
+                            "-Dcheckstyle.skip=true",
+                            "-Dpmd.skip=true",
+                            "-Dspotbugs.skip=true",
+                            "-DforkCount=1",
+                            "-DreuseForks=false",
+                            "-Djacoco.skip=false",
+                            "-Dmaven.test.skip=false",
+                            "-X"  # 详细输出，便于调试
+                        ]
+                    else:
+                        maven_cmd_independent = [
+                            "mvn", "clean", "compile",
+                            "org.jacoco:jacoco-maven-plugin:0.8.7:prepare-agent",
+                            "org.jacoco:jacoco-maven-plugin:0.8.7:report",
+                            "-Dmaven.test.failure.ignore=true",
+                            "-Dproject.build.sourceEncoding=UTF-8",
+                            "-Dmaven.compiler.source=11",
+                            "-Dmaven.compiler.target=11",
+                            "-Dcheckstyle.skip=true",
+                            "-Dpmd.skip=true",
+                            "-Dspotbugs.skip=true",
+                            "-Djacoco.skip=false"
+                        ]
 
                     result_independent = subprocess.run(
                         maven_cmd_independent,
@@ -938,6 +1002,9 @@ def create_independent_pom(repo_dir: str, request_id: str) -> str:
                         <goals>
                             <goal>prepare-agent</goal>
                         </goals>
+                        <configuration>
+                            <propertyName>surefireArgLine</propertyName>
+                        </configuration>
                     </execution>
                     <execution>
                         <id>report</id>
@@ -945,8 +1012,24 @@ def create_independent_pom(repo_dir: str, request_id: str) -> str:
                         <goals>
                             <goal>report</goal>
                         </goals>
+                        <configuration>
+                            <outputDirectory>${{project.build.directory}}/site/jacoco</outputDirectory>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>post-test</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
                     </execution>
                 </executions>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*Test.class</exclude>
+                        <exclude>**/test/**</exclude>
+                    </excludes>
+                </configuration>
             </plugin>
 
             <!-- Surefire Plugin for running tests -->
@@ -956,6 +1039,15 @@ def create_independent_pom(repo_dir: str, request_id: str) -> str:
                 <version>3.0.0-M5</version>
                 <configuration>
                     <testFailureIgnore>true</testFailureIgnore>
+                    <argLine>${{surefireArgLine}}</argLine>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/Test*.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/*TestCase.java</include>
+                    </includes>
+                    <forkCount>1</forkCount>
+                    <reuseForks>false</reuseForks>
                 </configuration>
             </plugin>
         </plugins>

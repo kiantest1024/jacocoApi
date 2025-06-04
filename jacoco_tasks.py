@@ -59,8 +59,10 @@ def run_docker_jacoco_scan(
                     branch_name=branch_name,
                     commit_id=commit_id,
                     coverage_data=report_data['coverage_summary'],
-                    service_name=service_config.get('service_name')
+                    scan_result=final_result,
+                    request_id=request_id
                 )
+                logger.info(f"[{request_id}] 飞书通知已发送")
             except Exception as e:
                 logger.warning(f"[{request_id}] Failed to send notification: {str(e)}")
 
@@ -298,9 +300,9 @@ def parse_jacoco_xml_file(xml_path: str, request_id: str) -> Dict[str, Any]:
 def _run_local_scan(
     repo_url: str,
     commit_id: str,
-    _: str,  # branch_name
+    branch_name: str,
     reports_dir: str,
-    __: Dict[str, Any],  # service_config
+    service_config: Dict[str, Any],
     request_id: str
 ) -> Dict[str, Any]:
     """
@@ -488,12 +490,21 @@ def _run_local_scan(
                 logger.info(f"[{request_id}] JaCoCo报告解析成功")
 
                 # 显示覆盖率摘要
-                if 'report_data' in scan_result:
-                    report_data = scan_result['report_data']
+                if 'coverage_percentage' in scan_result:
                     logger.info(f"[{request_id}] 覆盖率摘要:")
-                    logger.info(f"[{request_id}]   行覆盖率: {report_data.get('coverage_percentage', 'N/A')}%")
-                    logger.info(f"[{request_id}]   分支覆盖率: {report_data.get('branch_coverage', 'N/A')}%")
-                    logger.info(f"[{request_id}]   覆盖行数: {report_data.get('lines_covered', 'N/A')}/{report_data.get('lines_total', 'N/A')}")
+                    logger.info(f"[{request_id}]   行覆盖率: {scan_result.get('coverage_percentage', 'N/A')}%")
+                    logger.info(f"[{request_id}]   分支覆盖率: {scan_result.get('branch_coverage', 'N/A')}%")
+                    logger.info(f"[{request_id}]   覆盖行数: {scan_result.get('lines_covered', 'N/A')}/{scan_result.get('lines_total', 'N/A')}")
+
+                    # 创建coverage_summary用于通知
+                    scan_result["coverage_summary"] = {
+                        "line_coverage": scan_result.get('line_coverage', 0),
+                        "branch_coverage": scan_result.get('branch_coverage', 0),
+                        "instruction_coverage": scan_result.get('instruction_coverage', 0),
+                        "method_coverage": scan_result.get('method_coverage', 0),
+                        "class_coverage": scan_result.get('class_coverage', 0)
+                    }
+                    logger.info(f"[{request_id}] 创建coverage_summary用于通知")
 
             except Exception as e:
                 logger.warning(f"[{request_id}] 解析报告失败: {str(e)}")

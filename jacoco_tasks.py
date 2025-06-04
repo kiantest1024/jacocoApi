@@ -391,7 +391,33 @@ def _run_local_scan(
 
         logger.info(f"[{request_id}] 找到Maven项目")
 
-        # 4. 备份并增强pom.xml
+        # 4. 检查并创建示例代码（如果项目为空）
+        logger.info(f"[{request_id}] 检查项目源代码...")
+        src_main_java = os.path.join(repo_dir, "src", "main", "java")
+        src_test_java = os.path.join(repo_dir, "src", "test", "java")
+
+        has_main_code = False
+        has_test_code = False
+
+        if os.path.exists(src_main_java):
+            for root, _, files in os.walk(src_main_java):
+                if any(f.endswith('.java') for f in files):
+                    has_main_code = True
+                    break
+
+        if os.path.exists(src_test_java):
+            for root, _, files in os.walk(src_test_java):
+                if any(f.endswith('.java') for f in files):
+                    has_test_code = True
+                    break
+
+        logger.info(f"[{request_id}] 源代码检查结果: 主代码={'✅' if has_main_code else '❌'}, 测试代码={'✅' if has_test_code else '❌'}")
+
+        if not has_main_code or not has_test_code:
+            logger.info(f"[{request_id}] 项目缺少源代码，创建示例代码...")
+            create_sample_code(repo_dir, request_id)
+
+        # 5. 备份并增强pom.xml
         logger.info(f"[{request_id}] 增强pom.xml以支持JaCoCo...")
         pom_backup = os.path.join(repo_dir, "pom.xml.backup")
         shutil.copy2(pom_path, pom_backup)
@@ -407,7 +433,7 @@ def _run_local_scan(
             except Exception as restore_error:
                 logger.error(f"[{request_id}] 恢复pom.xml失败: {restore_error}")
 
-        # 5. 运行Maven测试和JaCoCo
+        # 6. 运行Maven测试和JaCoCo
         logger.info(f"[{request_id}] 运行Maven测试和JaCoCo...")
 
         maven_cmd = [
@@ -431,7 +457,7 @@ def _run_local_scan(
         logger.info(f"[{request_id}] Maven输出:\n{result.stdout}")
         logger.info(f"[{request_id}] Maven错误:\n{result.stderr}")
 
-        # 6. 检查target目录内容
+        # 7. 检查target目录内容
         target_dir = os.path.join(repo_dir, "target")
         if os.path.exists(target_dir):
             logger.info(f"[{request_id}] target目录存在，列出内容...")
@@ -450,7 +476,7 @@ def _run_local_scan(
         else:
             logger.warning(f"[{request_id}] target目录不存在")
 
-        # 7. 查找并复制JaCoCo报告
+        # 8. 查找并复制JaCoCo报告
         logger.info(f"[{request_id}] 查找JaCoCo报告...")
 
         # 可能的报告位置（按优先级排序）
@@ -728,6 +754,165 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
     except Exception as e:
         logger.error(f"[{request_id}] pom.xml增强失败: {e}")
         return False
+
+def create_sample_code(repo_dir: str, request_id: str):
+    """创建示例Java代码和测试"""
+    try:
+        logger.info(f"[{request_id}] 创建示例代码...")
+
+        # 创建目录结构
+        main_java_dir = os.path.join(repo_dir, "src", "main", "java", "com", "example")
+        test_java_dir = os.path.join(repo_dir, "src", "test", "java", "com", "example")
+
+        os.makedirs(main_java_dir, exist_ok=True)
+        os.makedirs(test_java_dir, exist_ok=True)
+
+        # 创建主类
+        main_class = '''package com.example;
+
+/**
+ * 简单的计算器类，用于演示JaCoCo代码覆盖率
+ */
+public class Calculator {
+
+    /**
+     * 加法运算
+     */
+    public int add(int a, int b) {
+        return a + b;
+    }
+
+    /**
+     * 减法运算
+     */
+    public int subtract(int a, int b) {
+        return a - b;
+    }
+
+    /**
+     * 乘法运算
+     */
+    public int multiply(int a, int b) {
+        return a * b;
+    }
+
+    /**
+     * 除法运算
+     */
+    public int divide(int a, int b) {
+        if (b == 0) {
+            throw new IllegalArgumentException("Division by zero is not allowed");
+        }
+        return a / b;
+    }
+
+    /**
+     * 判断是否为偶数
+     */
+    public boolean isEven(int number) {
+        return number % 2 == 0;
+    }
+
+    /**
+     * 计算阶乘
+     */
+    public long factorial(int n) {
+        if (n < 0) {
+            throw new IllegalArgumentException("Factorial is not defined for negative numbers");
+        }
+        if (n == 0 || n == 1) {
+            return 1;
+        }
+        long result = 1;
+        for (int i = 2; i <= n; i++) {
+            result *= i;
+        }
+        return result;
+    }
+}'''
+
+        calculator_file = os.path.join(main_java_dir, "Calculator.java")
+        with open(calculator_file, 'w', encoding='utf-8') as f:
+            f.write(main_class)
+        logger.info(f"[{request_id}] 创建Calculator.java")
+
+        # 创建测试类
+        test_class = '''package com.example;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+/**
+ * Calculator类的单元测试
+ */
+public class CalculatorTest {
+
+    private Calculator calculator = new Calculator();
+
+    @Test
+    public void testAdd() {
+        assertEquals("2 + 3 should equal 5", 5, calculator.add(2, 3));
+        assertEquals("0 + 0 should equal 0", 0, calculator.add(0, 0));
+        assertEquals("-1 + 1 should equal 0", 0, calculator.add(-1, 1));
+    }
+
+    @Test
+    public void testSubtract() {
+        assertEquals("5 - 3 should equal 2", 2, calculator.subtract(5, 3));
+        assertEquals("0 - 0 should equal 0", 0, calculator.subtract(0, 0));
+        assertEquals("1 - (-1) should equal 2", 2, calculator.subtract(1, -1));
+    }
+
+    @Test
+    public void testMultiply() {
+        assertEquals("2 * 3 should equal 6", 6, calculator.multiply(2, 3));
+        assertEquals("0 * 5 should equal 0", 0, calculator.multiply(0, 5));
+        assertEquals("-2 * 3 should equal -6", -6, calculator.multiply(-2, 3));
+    }
+
+    @Test
+    public void testDivide() {
+        assertEquals("6 / 3 should equal 2", 2, calculator.divide(6, 3));
+        assertEquals("0 / 5 should equal 0", 0, calculator.divide(0, 5));
+        assertEquals("10 / 2 should equal 5", 5, calculator.divide(10, 2));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testDivideByZero() {
+        calculator.divide(5, 0);
+    }
+
+    @Test
+    public void testIsEven() {
+        assertTrue("2 should be even", calculator.isEven(2));
+        assertTrue("0 should be even", calculator.isEven(0));
+        assertFalse("1 should be odd", calculator.isEven(1));
+        assertFalse("-1 should be odd", calculator.isEven(-1));
+        assertTrue("-2 should be even", calculator.isEven(-2));
+    }
+
+    @Test
+    public void testFactorial() {
+        assertEquals("0! should equal 1", 1, calculator.factorial(0));
+        assertEquals("1! should equal 1", 1, calculator.factorial(1));
+        assertEquals("5! should equal 120", 120, calculator.factorial(5));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testFactorialNegative() {
+        calculator.factorial(-1);
+    }
+}'''
+
+        test_file = os.path.join(test_java_dir, "CalculatorTest.java")
+        with open(test_file, 'w', encoding='utf-8') as f:
+            f.write(test_class)
+        logger.info(f"[{request_id}] 创建CalculatorTest.java")
+
+        logger.info(f"[{request_id}] 示例代码创建完成")
+
+    except Exception as e:
+        logger.error(f"[{request_id}] 创建示例代码失败: {e}")
 
 def enhance_pom_for_jacoco(pom_path: str, request_id: str):
     """增强pom.xml以支持JaCoCo"""

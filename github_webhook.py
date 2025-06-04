@@ -433,8 +433,8 @@ async def webhook_handler_no_auth(request: Request):
         service_name = service_config['service_name']
         logger.info(f"[{request_id}] 为项目 {service_name} 生成扫描配置")
 
-        # 发送 JaCoCo 扫描任务到 Celery
-        from jacoco_tasks import run_docker_jacoco_scan
+        # 发送 JaCoCo 扫描任务
+        from jacoco_tasks import run_jacoco_scan_docker
 
         # 检查是否启用同步模式（用于调试）
         sync_mode = service_config.get('sync_mode', False)
@@ -442,11 +442,16 @@ async def webhook_handler_no_auth(request: Request):
         if sync_mode:
             logger.info(f"[{request_id}] 使用同步模式执行扫描")
             try:
+                # 创建临时报告目录
+                import tempfile
+                reports_dir = tempfile.mkdtemp(prefix=f"jacoco_reports_{request_id}_")
+
                 # 同步执行扫描
-                scan_result = run_docker_jacoco_scan(
+                scan_result = run_jacoco_scan_docker(
                     repo_url=repo_url,
                     commit_id=commit_id,
                     branch_name=branch_name,
+                    reports_dir=reports_dir,
                     service_config=service_config,
                     request_id=request_id
                 )
@@ -495,13 +500,11 @@ async def webhook_handler_no_auth(request: Request):
                     }
                 )
         else:
-            # 异步执行（原有逻辑）
-            task = run_docker_jacoco_scan.delay(
-                repo_url=repo_url,
-                commit_id=commit_id,
-                branch_name=branch_name,
-                service_config=service_config,
-                request_id=request_id
+            # 异步执行（使用Celery）
+            task = celery_app.send_task(
+                'scan_tasks.execute_jacoco_scan',
+                args=[repo_url, commit_id, branch_name, service_config],
+                kwargs={"request_id": request_id, "event_type": event_type}
             )
 
             logger.info(f"[{request_id}] JaCoCo 扫描任务已排队: {task.id} 用于项目 {service_name}")

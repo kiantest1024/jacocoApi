@@ -163,30 +163,62 @@ async def github_webhook_no_auth(request: Request):
         logger.info(f"[{request_id}] Commit: {commit_id}")
         logger.info(f"[{request_id}] Branch: {branch_name}")
         
-        # 尝试异步扫描，如果失败则使用同步扫描
-        try:
-            # 尝试导入Celery任务
-            from jacoco_tasks import run_docker_jacoco_scan
+        # 强制使用同步扫描（确保立即执行）
+        logger.info(f"[{request_id}] 使用同步扫描模式")
 
-            # 异步任务
-            task = run_docker_jacoco_scan.delay(
-                repo_url=repo_url,
-                commit_id=commit_id,
-                branch_name=branch_name,
-                service_config=service_config,
-                request_id=request_id
+        # 同步扫描
+        try:
+            from jacoco_tasks import run_jacoco_scan_docker, parse_jacoco_reports
+            import tempfile
+            import shutil
+
+            # 创建临时报告目录
+            reports_dir = tempfile.mkdtemp(prefix=f"jacoco_reports_{request_id}_")
+            logger.info(f"[{request_id}] 开始同步 JaCoCo 扫描...")
+
+            # 执行扫描
+            scan_result = run_jacoco_scan_docker(
+                repo_url, commit_id, branch_name, reports_dir, service_config, request_id
             )
 
-            logger.info(f"[{request_id}] JaCoCo 扫描任务已排队: {task.id} 用于项目 {service_name}")
+            # 解析报告
+            report_data = parse_jacoco_reports(reports_dir, request_id)
+
+            # 发送通知
+            webhook_url = service_config.get('notification_webhook')
+            if webhook_url and 'coverage_summary' in report_data:
+                try:
+                    from feishu_notification import send_jacoco_notification
+                    send_jacoco_notification(
+                        webhook_url=webhook_url,
+                        repo_url=repo_url,
+                        branch_name=branch_name,
+                        commit_id=commit_id,
+                        coverage_data=report_data['coverage_summary'],
+                        scan_result=scan_result,
+                        request_id=request_id
+                    )
+                    logger.info(f"[{request_id}] 飞书通知已发送")
+                except Exception as notify_error:
+                    logger.warning(f"[{request_id}] 发送通知失败: {notify_error}")
+
+            # 清理临时目录
+            try:
+                shutil.rmtree(reports_dir)
+            except Exception as cleanup_error:
+                logger.warning(f"[{request_id}] 清理临时目录失败: {cleanup_error}")
+
+            logger.info(f"[{request_id}] 同步 JaCoCo 扫描完成")
 
             return JSONResponse(
                 status_code=200,
                 content={
-                    "status": "accepted",
-                    "task_id": task.id,
+                    "status": "completed",
                     "request_id": request_id,
                     "event_type": event_type,
-                    "message": f"项目 {service_name} 的提交 {commit_id[:8]} 的 JaCoCo 扫描任务已成功排队（异步）",
+                    "message": f"项目 {service_name} 的提交 {commit_id[:8]} 的 JaCoCo 扫描已完成（同步）",
+                    "scan_result": scan_result,
+                    "report_data": report_data,
                     "extracted_info": {
                         "repo_url": repo_url,
                         "commit_id": commit_id,
@@ -196,76 +228,11 @@ async def github_webhook_no_auth(request: Request):
                 }
             )
 
-        except Exception as celery_error:
-            logger.warning(f"[{request_id}] Celery 不可用，使用同步扫描: {celery_error}")
+        except Exception as sync_error:
+            logger.error(f"[{request_id}] 同步扫描失败: {sync_error}")
 
-            # 同步扫描
-            try:
-                from jacoco_tasks import run_jacoco_scan_docker, parse_jacoco_reports
-                import tempfile
-                import shutil
-
-                # 创建临时报告目录
-                reports_dir = tempfile.mkdtemp(prefix=f"jacoco_reports_{request_id}_")
-                logger.info(f"[{request_id}] 开始同步 JaCoCo 扫描...")
-
-                # 执行扫描
-                scan_result = run_jacoco_scan_docker(
-                    repo_url, commit_id, branch_name, reports_dir, service_config, request_id
-                )
-
-                # 解析报告
-                report_data = parse_jacoco_reports(reports_dir, request_id)
-
-                # 发送通知
-                webhook_url = service_config.get('notification_webhook')
-                if webhook_url and 'coverage_summary' in report_data:
-                    try:
-                        from feishu_notification import send_jacoco_notification
-                        send_jacoco_notification(
-                            webhook_url=webhook_url,
-                            repo_url=repo_url,
-                            branch_name=branch_name,
-                            commit_id=commit_id,
-                            coverage_data=report_data['coverage_summary'],
-                            scan_result=scan_result,
-                            request_id=request_id
-                        )
-                        logger.info(f"[{request_id}] 飞书通知已发送")
-                    except Exception as notify_error:
-                        logger.warning(f"[{request_id}] 发送通知失败: {notify_error}")
-
-                # 清理临时目录
-                try:
-                    shutil.rmtree(reports_dir)
-                except Exception as cleanup_error:
-                    logger.warning(f"[{request_id}] 清理临时目录失败: {cleanup_error}")
-
-                logger.info(f"[{request_id}] 同步 JaCoCo 扫描完成")
-
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "status": "completed",
-                        "request_id": request_id,
-                        "event_type": event_type,
-                        "message": f"项目 {service_name} 的提交 {commit_id[:8]} 的 JaCoCo 扫描已完成（同步）",
-                        "scan_result": scan_result,
-                        "report_data": report_data,
-                        "extracted_info": {
-                            "repo_url": repo_url,
-                            "commit_id": commit_id,
-                            "branch_name": branch_name,
-                            "service_name": service_name
-                        }
-                    }
-                )
-
-            except Exception as sync_error:
-                logger.error(f"[{request_id}] 同步扫描失败: {sync_error}")
-
-                # 返回错误但不中断服务
-                return JSONResponse(
+            # 返回错误但不中断服务
+            return JSONResponse(
                     status_code=200,  # 仍返回200，表示webhook接收成功
                     content={
                         "status": "error",

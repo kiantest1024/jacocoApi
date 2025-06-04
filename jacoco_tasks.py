@@ -547,25 +547,53 @@ def _run_local_scan(
         # 6. 运行Maven测试和JaCoCo
         logger.info(f"[{request_id}] 运行Maven测试和JaCoCo...")
 
-        # 使用简化的、经过验证的Maven命令
-        logger.info(f"[{request_id}] 执行JaCoCo扫描（简化版本）")
-        maven_cmd = [
+        # 首先尝试离线模式，如果失败则使用在线模式
+        logger.info(f"[{request_id}] 执行JaCoCo扫描（优化版本）")
+
+        # 离线模式命令
+        maven_cmd_offline = [
             "mvn", "clean", "compile", "test-compile", "test",
             "jacoco:report",
             "-Dmaven.test.failure.ignore=true",
             "-Dproject.build.sourceEncoding=UTF-8",
             "-Dmaven.compiler.source=11",
             "-Dmaven.compiler.target=11",
-            "-U"
+            "-o",  # 离线模式
+            "--batch-mode"
         ]
 
+        # 在线模式命令（备用）
+        maven_cmd_online = [
+            "mvn", "clean", "compile", "test-compile", "test",
+            "jacoco:report",
+            "-Dmaven.test.failure.ignore=true",
+            "-Dproject.build.sourceEncoding=UTF-8",
+            "-Dmaven.compiler.source=11",
+            "-Dmaven.compiler.target=11",
+            "--batch-mode",
+            "-Dmaven.wagon.http.retryHandler.count=2"
+        ]
+
+        # 先尝试离线模式
+        logger.info(f"[{request_id}] 尝试离线模式扫描...")
         result = subprocess.run(
-            maven_cmd,
+            maven_cmd_offline,
             cwd=repo_dir,
             capture_output=True,
             text=True,
-            timeout=600
+            timeout=300  # 离线模式应该很快
         )
+
+        # 如果离线模式失败，使用在线模式
+        if result.returncode != 0:
+            logger.warning(f"[{request_id}] 离线模式失败，切换到在线模式...")
+            result = subprocess.run(
+                maven_cmd_online,
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+                timeout=600  # 在线模式允许更长时间
+            )
 
         logger.info(f"[{request_id}] Maven执行完成，返回码: {result.returncode}")
         logger.info(f"[{request_id}] Maven输出:\n{result.stdout}")

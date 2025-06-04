@@ -159,14 +159,23 @@ async def health_check():
     }
 
 @app.post("/github/webhook-no-auth")
-async def github_webhook_no_auth(request: Request):
-    """GitHub/GitLab webhook处理（异步版本，优化处理）"""
+def github_webhook_no_auth_sync(request: Request):
+    """GitHub/GitLab webhook处理（完全同步版本）"""
     try:
         # 生成请求ID
         request_id = f"req_{int(time.time())}"
 
-        # 获取请求体 - 异步方式
-        body = await request.body()
+        # 获取请求体 - 同步方式（使用FastAPI的内部机制）
+        import asyncio
+        try:
+            # 尝试获取当前事件循环
+            loop = asyncio.get_running_loop()
+            # 如果在事件循环中，创建新的任务
+            body = loop.run_until_complete(request.body())
+        except RuntimeError:
+            # 如果没有运行的事件循环，直接运行
+            body = asyncio.run(request.body())
+
         if not body:
             raise HTTPException(status_code=400, detail="Empty request body")
         
@@ -228,32 +237,22 @@ async def github_webhook_no_auth(request: Request):
         # 强制使用同步扫描（确保立即执行）
         logger.info(f"[{request_id}] 使用同步扫描模式")
 
-        # 异步扫描 - 在线程池中执行同步操作
+        # 完全同步扫描
         try:
-            import asyncio
-            from concurrent.futures import ThreadPoolExecutor
             from jacoco_tasks import run_jacoco_scan_docker, parse_jacoco_reports
             import tempfile
 
             # 创建临时报告目录
             reports_dir = tempfile.mkdtemp(prefix=f"jacoco_reports_{request_id}_")
-            logger.info(f"[{request_id}] 开始异步 JaCoCo 扫描...")
+            logger.info(f"[{request_id}] 开始同步 JaCoCo 扫描...")
 
-            # 在线程池中执行同步扫描操作
-            loop = asyncio.get_event_loop()
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                scan_result = await loop.run_in_executor(
-                    executor,
-                    run_jacoco_scan_docker,
-                    repo_url, commit_id, branch_name, reports_dir, service_config, request_id
-                )
+            # 直接执行同步扫描操作
+            scan_result = run_jacoco_scan_docker(
+                repo_url, commit_id, branch_name, reports_dir, service_config, request_id
+            )
 
-                # 在同一个线程池中解析报告
-                report_data = await loop.run_in_executor(
-                    executor,
-                    parse_jacoco_reports,
-                    reports_dir, request_id
-                )
+            # 直接解析报告
+            report_data = parse_jacoco_reports(reports_dir, request_id)
 
             # 调试：显示解析的报告数据
             logger.info(f"[{request_id}] 报告解析结果: {report_data}")

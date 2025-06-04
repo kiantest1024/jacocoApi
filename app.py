@@ -159,14 +159,15 @@ async def health_check():
     }
 
 @app.post("/github/webhook-no-auth")
-async def github_webhook_no_auth(request: Request):
+def github_webhook_no_auth(request: Request):
     """GitHub/GitLab webhook处理（无认证版本）"""
     try:
         # 生成请求ID
         request_id = f"req_{int(time.time())}"
         
-        # 获取请求体
-        body = await request.body()
+        # 获取请求体 - 同步方式
+        import asyncio
+        body = asyncio.run(request.body())
         if not body:
             raise HTTPException(status_code=400, detail="Empty request body")
         

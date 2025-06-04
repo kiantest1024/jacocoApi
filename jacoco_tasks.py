@@ -307,6 +307,18 @@ def parse_jacoco_reports(reports_dir: str, request_id: str) -> Dict[str, Any]:
         try:
             coverage_data = parse_jacoco_xml_file(jacoco_xml_path, request_id)
             result.update(coverage_data)
+
+            # 创建coverage_summary字段用于通知系统
+            result["coverage_summary"] = {
+                "instruction_coverage": coverage_data.get('instruction_coverage', 0),
+                "branch_coverage": coverage_data.get('branch_coverage', 0),
+                "line_coverage": coverage_data.get('line_coverage', 0),
+                "complexity_coverage": coverage_data.get('complexity_coverage', 0),
+                "method_coverage": coverage_data.get('method_coverage', 0),
+                "class_coverage": coverage_data.get('class_coverage', 0)
+            }
+            logger.info(f"[{request_id}] 创建coverage_summary用于通知系统")
+
         except Exception as e:
             logger.warning(f"[{request_id}] Failed to parse XML report: {str(e)}")
     else:

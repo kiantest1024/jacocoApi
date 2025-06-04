@@ -1,14 +1,13 @@
-# JaCoCo Scanner Docker Image
-FROM openjdk:11-jdk-slim
+# JaCoCo Scanner Docker Image (Alpine版本 - 更轻量)
+FROM openjdk:11-jdk-alpine
 
 # 安装必要的工具
-RUN apt-get update && apt-get install -y \
+RUN apk add --no-cache \
     git \
     maven \
     curl \
     python3 \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    bash
 
 # 设置工作目录
 WORKDIR /app

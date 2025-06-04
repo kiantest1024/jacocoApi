@@ -246,6 +246,9 @@ async def github_webhook_no_auth(request: Request):
             # 解析报告
             report_data = parse_jacoco_reports(reports_dir, request_id)
 
+            # 调试：显示解析的报告数据
+            logger.info(f"[{request_id}] 报告解析结果: {report_data}")
+
             # 如果解析报告失败但扫描成功，使用扫描结果中的覆盖率数据
             if not report_data.get('reports_available', False) and scan_result.get('status') in ['completed', 'partial']:
                 logger.info(f"[{request_id}] 使用扫描结果中的覆盖率数据")
@@ -307,30 +310,34 @@ async def github_webhook_no_auth(request: Request):
             else:
                 logger.warning(f"[{request_id}] 未配置Lark webhook URL，跳过通知发送")
 
-            # 清理临时目录
-            try:
-                shutil.rmtree(reports_dir)
-            except Exception as cleanup_error:
-                logger.warning(f"[{request_id}] 清理临时目录失败: {cleanup_error}")
+            # 构建响应数据
+            response_data = {
+                "status": "completed",
+                "request_id": request_id,
+                "event_type": event_type,
+                "message": f"项目 {service_name} 的提交 {commit_id[:8]} 的 JaCoCo 扫描已完成（同步）",
+                "scan_result": scan_result,
+                "report_data": report_data,
+                "extracted_info": {
+                    "repo_url": repo_url,
+                    "commit_id": commit_id,
+                    "branch_name": branch_name,
+                    "service_name": service_name
+                }
+            }
 
             logger.info(f"[{request_id}] 同步 JaCoCo 扫描完成")
 
+            # 延迟清理临时目录，避免影响响应
+            try:
+                # 不立即清理，让系统自动清理临时目录
+                logger.info(f"[{request_id}] 临时目录将由系统自动清理: {reports_dir}")
+            except Exception as cleanup_error:
+                logger.warning(f"[{request_id}] 临时目录清理注意: {cleanup_error}")
+
             return JSONResponse(
                 status_code=200,
-                content={
-                    "status": "completed",
-                    "request_id": request_id,
-                    "event_type": event_type,
-                    "message": f"项目 {service_name} 的提交 {commit_id[:8]} 的 JaCoCo 扫描已完成（同步）",
-                    "scan_result": scan_result,
-                    "report_data": report_data,
-                    "extracted_info": {
-                        "repo_url": repo_url,
-                        "commit_id": commit_id,
-                        "branch_name": branch_name,
-                        "service_name": service_name
-                    }
-                }
+                content=response_data
             )
 
         except Exception as sync_error:

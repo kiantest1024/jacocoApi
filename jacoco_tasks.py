@@ -51,20 +51,41 @@ def run_docker_jacoco_scan(
         }
 
         webhook_url = service_config.get('notification_webhook')
-        if webhook_url and 'coverage_summary' in report_data:
+        logger.info(f"[{request_id}] 检查通知配置: webhook_url={webhook_url}")
+        logger.info(f"[{request_id}] report_data keys: {list(report_data.keys())}")
+        logger.info(f"[{request_id}] scan_result keys: {list(scan_result.keys())}")
+
+        # 检查coverage_summary在report_data或scan_result中
+        coverage_summary = None
+        if 'coverage_summary' in report_data:
+            coverage_summary = report_data['coverage_summary']
+            logger.info(f"[{request_id}] 从report_data获取coverage_summary")
+        elif 'coverage_summary' in scan_result:
+            coverage_summary = scan_result['coverage_summary']
+            logger.info(f"[{request_id}] 从scan_result获取coverage_summary")
+
+        if webhook_url and coverage_summary:
             try:
+                logger.info(f"[{request_id}] 准备发送飞书通知...")
+                logger.info(f"[{request_id}] coverage_summary: {coverage_summary}")
+
                 send_jacoco_notification(
                     webhook_url=webhook_url,
                     repo_url=repo_url,
                     branch_name=branch_name,
                     commit_id=commit_id,
-                    coverage_data=report_data['coverage_summary'],
+                    coverage_data=coverage_summary,
                     scan_result=final_result,
                     request_id=request_id
                 )
                 logger.info(f"[{request_id}] 飞书通知已发送")
             except Exception as e:
                 logger.warning(f"[{request_id}] Failed to send notification: {str(e)}")
+        else:
+            if not webhook_url:
+                logger.warning(f"[{request_id}] 未配置webhook_url，跳过通知")
+            if not coverage_summary:
+                logger.warning(f"[{request_id}] 未找到coverage_summary，跳过通知")
 
         return final_result
 

@@ -56,8 +56,8 @@ DEFAULT_SCAN_CONFIG: Dict[str, Any] = {
     "maven_goals": ["clean", "test", "jacoco:report"],
     "report_formats": ["xml", "html", "json"],
     "use_docker": False,  # 临时禁用Docker，使用本地扫描
-    "use_shared_container": False,  # 临时禁用共享容器模式  # 启用Docker（优先）
-    "force_local_scan": False,  # 不强制本地扫描
+    "use_shared_container": False,  # 临时禁用共享容器模式
+    "force_local_scan": True,  # 强制本地扫描
     "sync_mode": True,  # 启用同步模式用于调试
     "use_incremental_update": True,
     "scan_timeout": 1800,

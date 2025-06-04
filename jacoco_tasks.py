@@ -97,8 +97,8 @@ def run_jacoco_scan_docker(
     if service_config.get('force_local_scan', False):
         logger.info(f"[{request_id}] 强制使用本地扫描")
         scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
-    elif service_config.get('use_docker', True):
-        # 优先尝试Docker扫描
+    elif service_config.get('use_docker', True) and not service_config.get('force_local_scan', False):
+        # 优先尝试Docker扫描（除非强制本地扫描）
         logger.info(f"[{request_id}] 优先使用Docker扫描")
 
         # 检查Docker是否可用

@@ -159,7 +159,7 @@ async def health_check():
     }
 
 @app.post("/github/webhook-no-auth")
-def github_webhook_no_auth_sync(request: Request):
+def github_webhook_no_auth(request: Request):
     """GitHub/GitLab webhook处理（完全同步版本）"""
     try:
         # 生成请求ID

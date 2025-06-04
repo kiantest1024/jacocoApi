@@ -55,7 +55,8 @@ DEFAULT_SCAN_CONFIG: Dict[str, Any] = {
     "coverage_threshold": 50.0,
     "maven_goals": ["clean", "test", "jacoco:report"],
     "report_formats": ["xml", "html", "json"],
-    "use_docker": False,  # 临时禁用Docker，使用本地扫描  # 启用Docker（优先）
+    "use_docker": True,  # 启用Docker扫描
+    "use_shared_container": True,  # 启用共享容器模式  # 启用Docker（优先）
     "force_local_scan": False,  # 不强制本地扫描
     "sync_mode": True,  # 启用同步模式用于调试
     "use_incremental_update": True,

@@ -499,5 +499,73 @@ def start_server():
     finally:
         logger.info("🔚 服务已关闭")
 
+@app.get("/docker/status")
+def get_docker_status():
+    """获取Docker容器状态"""
+    try:
+        from docker_manager import get_shared_container_manager
+
+        manager = get_shared_container_manager()
+        status = manager.get_container_status()
+
+        return {
+            "shared_container": status,
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "shared_container": {"status": "error"},
+            "timestamp": time.time()
+        }
+
+@app.post("/docker/start")
+def start_shared_container():
+    """启动共享Docker容器"""
+    try:
+        from docker_manager import get_shared_container_manager
+
+        manager = get_shared_container_manager()
+        success = manager.start_shared_container()
+
+        if success:
+            status = manager.get_container_status()
+            return {
+                "success": True,
+                "message": "共享容器启动成功",
+                "container_status": status
+            }
+        else:
+            return {
+                "success": False,
+                "message": "共享容器启动失败"
+            }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "启动共享容器时发生异常"
+        }
+
+@app.post("/docker/stop")
+def stop_shared_container():
+    """停止共享Docker容器"""
+    try:
+        from docker_manager import get_shared_container_manager
+
+        manager = get_shared_container_manager()
+        manager.stop_shared_container()
+
+        return {
+            "success": True,
+            "message": "共享容器已停止"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "停止共享容器时发生异常"
+        }
+
 if __name__ == "__main__":
     start_server()

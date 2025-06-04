@@ -104,7 +104,16 @@ def run_jacoco_scan_docker(
         # 检查Docker是否可用
         if _check_docker_available(request_id):
             try:
-                scan_result = _run_docker_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
+                # 检查是否启用共享容器模式
+                use_shared_container = service_config.get('use_shared_container', True)
+
+                if use_shared_container:
+                    logger.info(f"[{request_id}] 使用共享Docker容器模式")
+                    scan_result = _run_shared_docker_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
+                else:
+                    logger.info(f"[{request_id}] 使用传统Docker模式")
+                    scan_result = _run_docker_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
+
                 logger.info(f"[{request_id}] ✅ Docker扫描成功完成")
             except Exception as docker_error:
                 logger.warning(f"[{request_id}] Docker扫描失败，回退到本地扫描: {str(docker_error)}")
@@ -176,6 +185,85 @@ def _check_docker_available(request_id: str) -> bool:
     except Exception as e:
         logger.warning(f"[{request_id}] Docker检查失败: {str(e)}")
         return False
+
+def _run_shared_docker_scan(
+    repo_url: str,
+    commit_id: str,
+    branch_name: str,
+    reports_dir: str,
+    service_config: Dict[str, Any],
+    request_id: str
+) -> Dict[str, Any]:
+    """使用共享Docker容器执行扫描"""
+    try:
+        from docker_manager import get_shared_container_manager
+
+        manager = get_shared_container_manager()
+        service_name = service_config.get('service_name', 'unknown')
+
+        logger.info(f"[{request_id}] 在共享容器中执行JaCoCo扫描")
+
+        # 在共享容器中执行扫描
+        scan_result = manager.execute_scan(
+            repo_url=repo_url,
+            commit_id=commit_id,
+            branch_name=branch_name,
+            service_name=service_name,
+            request_id=request_id
+        )
+
+        # 如果扫描成功，复制报告到指定目录
+        if scan_result.get('status') == 'completed':
+            task_reports_dir = scan_result.get('reports_dir')
+            if task_reports_dir and os.path.exists(task_reports_dir):
+                logger.info(f"[{request_id}] 复制报告从共享容器到: {reports_dir}")
+
+                # 确保目标目录存在
+                os.makedirs(reports_dir, exist_ok=True)
+
+                # 复制所有报告文件
+                import shutil
+                for item in os.listdir(task_reports_dir):
+                    src = os.path.join(task_reports_dir, item)
+                    dst = os.path.join(reports_dir, item)
+                    if os.path.isfile(src):
+                        shutil.copy2(src, dst)
+                    elif os.path.isdir(src):
+                        shutil.copytree(src, dst, dirs_exist_ok=True)
+
+                logger.info(f"[{request_id}] 报告复制完成")
+
+                # 解析报告并返回结果
+                try:
+                    parsed_reports = parse_jacoco_reports(reports_dir, request_id)
+                    return {
+                        "status": "completed",
+                        "scan_method": "shared_docker",
+                        "return_code": 0,
+                        "reports_dir": reports_dir,
+                        **parsed_reports
+                    }
+                except Exception as e:
+                    logger.error(f"[{request_id}] 解析报告失败: {e}")
+                    return {
+                        "status": "partial",
+                        "scan_method": "shared_docker",
+                        "return_code": 0,
+                        "reports_dir": reports_dir,
+                        "parse_error": str(e)
+                    }
+
+        # 如果扫描失败，返回错误信息
+        return {
+            "status": "failed",
+            "scan_method": "shared_docker",
+            "error": scan_result.get('error', '未知错误'),
+            "return_code": scan_result.get('return_code', 1)
+        }
+
+    except Exception as e:
+        logger.error(f"[{request_id}] 共享容器扫描失败: {e}")
+        raise
 
 def _run_docker_scan(
     repo_url: str,

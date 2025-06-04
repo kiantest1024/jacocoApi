@@ -76,14 +76,9 @@ def get_project_name_from_url(repo_url: str) -> str:
 
 def get_service_config(repo_url: str) -> Dict[str, Any]:
     """获取服务配置"""
-    project_name = get_project_name_from_url(repo_url)
-    config = DEFAULT_SCAN_CONFIG.copy()
-    config.update({
-        "service_name": project_name,
-        "repo_url": repo_url,
-        "local_repo_path": f"./repos/{project_name}",
-    })
-    return config
+    # 使用config.py中的配置函数
+    from config import get_service_config as config_get_service_config
+    return config_get_service_config(repo_url)
 
 def get_server_base_url(request: Request = None) -> str:
     """获取服务器基础URL"""
@@ -227,6 +222,12 @@ def github_webhook_no_auth(request: Request):
         # 获取配置
         service_config = get_service_config(repo_url)
         service_name = service_config['service_name']
+
+        # 调试：显示配置信息
+        logger.info(f"[{request_id}] 配置信息:")
+        logger.info(f"[{request_id}]   use_docker: {service_config.get('use_docker', 'unknown')}")
+        logger.info(f"[{request_id}]   use_shared_container: {service_config.get('use_shared_container', 'unknown')}")
+        logger.info(f"[{request_id}]   force_local_scan: {service_config.get('force_local_scan', 'unknown')}")
         
         logger.info(f"[{request_id}] Webhook received: {event_type}")
         logger.info(f"[{request_id}] Repository: {repo_url}")

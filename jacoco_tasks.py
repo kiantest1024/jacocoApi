@@ -1,83 +1,11 @@
 import os
 import logging
 import subprocess
-import tempfile
-import shutil
 import json
 import xml.etree.ElementTree as ET
 from typing import Dict, Any
-from celery import Celery
-
-from config import CELERY_BROKER_URL, CELERY_RESULT_BACKEND
-from feishu_notification import send_error_notification
 
 logger = logging.getLogger(__name__)
-
-celery_app = Celery(
-    'jacoco_tasks',
-    broker=CELERY_BROKER_URL,
-    backend=CELERY_RESULT_BACKEND
-)
-
-@celery_app.task(name='scan_tasks.run_docker_jacoco_scan', bind=True, max_retries=3)
-def run_docker_jacoco_scan(
-    self,
-    repo_url: str,
-    commit_id: str,
-    branch_name: str,
-    service_config: Dict[str, Any],
-    request_id: str
-) -> Dict[str, Any]:
-    reports_dir = None
-    try:
-        reports_dir = tempfile.mkdtemp(prefix=f"jacoco_reports_{request_id}_")
-        logger.info(f"[{request_id}] Using reports directory: {reports_dir}")
-
-        scan_result = run_jacoco_scan_docker(
-            repo_url, commit_id, branch_name, reports_dir, service_config, request_id
-        )
-
-        report_data = parse_jacoco_reports(reports_dir, request_id)
-
-        final_result = {
-            "status": "success",
-            "request_id": request_id,
-            "repo_url": repo_url,
-            "commit_id": commit_id,
-            "branch_name": branch_name,
-            "service_name": service_config.get('service_name'),
-            **scan_result,
-            **report_data
-        }
-
-        # 通知逻辑已移到 run_jacoco_scan_docker 函数中
-
-        return final_result
-
-    except Exception as e:
-        error_msg = f"JaCoCo scan failed: {str(e)}"
-        logger.error(f"[{request_id}] {error_msg}", exc_info=True)
-        
-        webhook_url = service_config.get('notification_webhook')
-        if webhook_url:
-            try:
-                send_error_notification(
-                    webhook_url=webhook_url,
-                    repo_url=repo_url,
-                    error_message=error_msg,
-                    service_name=service_config.get('service_name')
-                )
-            except Exception as notify_error:
-                logger.error(f"[{request_id}] Failed to send error notification: {str(notify_error)}")
-
-        raise self.retry(countdown=60, exc=e)
-
-    finally:
-        if reports_dir and os.path.exists(reports_dir):
-            try:
-                shutil.rmtree(reports_dir)
-            except Exception as e:
-                logger.warning(f"[{request_id}] Failed to cleanup reports directory: {str(e)}")
 
 def run_jacoco_scan_docker(
     repo_url: str,
@@ -448,9 +376,9 @@ def parse_jacoco_xml_file(xml_path: str, request_id: str) -> Dict[str, Any]:
 def _run_local_scan(
     repo_url: str,
     commit_id: str,
-    branch_name: str,  # 保留以保持接口一致性
+    _: str,  # branch_name - 保留以保持接口一致性
     reports_dir: str,
-    service_config: Dict[str, Any],  # 保留以保持接口一致性
+    __: Dict[str, Any],  # service_config - 保留以保持接口一致性
     request_id: str
 ) -> Dict[str, Any]:
     """

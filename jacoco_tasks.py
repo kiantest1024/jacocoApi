@@ -64,18 +64,21 @@ def run_docker_jacoco_scan(
             coverage_summary = final_result['coverage_summary']
             logger.info(f"[{request_id}] 从final_result获取coverage_summary")
         else:
-            # 如果没有coverage_summary，尝试从覆盖率数据创建一个
-            if 'line_coverage' in final_result or 'coverage_percentage' in final_result:
-                coverage_summary = {
-                    "line_coverage": final_result.get('line_coverage', final_result.get('coverage_percentage', 0)),
-                    "branch_coverage": final_result.get('branch_coverage', 0),
-                    "instruction_coverage": final_result.get('instruction_coverage', 0),
-                    "method_coverage": final_result.get('method_coverage', 0),
-                    "class_coverage": final_result.get('class_coverage', 0)
-                }
-                logger.info(f"[{request_id}] 从覆盖率数据创建coverage_summary: {coverage_summary}")
+            # 如果没有coverage_summary，创建一个默认的（可能是0%覆盖率）
+            coverage_summary = {
+                "line_coverage": final_result.get('line_coverage', final_result.get('coverage_percentage', 0)),
+                "branch_coverage": final_result.get('branch_coverage', 0),
+                "instruction_coverage": final_result.get('instruction_coverage', 0),
+                "method_coverage": final_result.get('method_coverage', 0),
+                "class_coverage": final_result.get('class_coverage', 0)
+            }
+            logger.info(f"[{request_id}] 创建默认coverage_summary: {coverage_summary}")
 
-        if webhook_url and coverage_summary:
+            # 如果所有覆盖率都是0，说明没有测试或没有代码
+            if all(v == 0 for v in coverage_summary.values()):
+                logger.info(f"[{request_id}] 检测到0%覆盖率，可能原因：无测试代码或无主代码")
+
+        if webhook_url:
             try:
                 logger.info(f"[{request_id}] 准备发送飞书通知...")
                 logger.info(f"[{request_id}] coverage_summary: {coverage_summary}")
@@ -107,13 +110,8 @@ def run_docker_jacoco_scan(
                 import traceback
                 logger.error(f"[{request_id}] 通知异常详情: {traceback.format_exc()}")
         else:
-            logger.warning(f"[{request_id}] ⚠️ 跳过飞书通知:")
-            if not webhook_url:
-                logger.warning(f"[{request_id}]   - 未配置webhook_url")
-                final_result["notification_skip_reason"] = "no_webhook_url"
-            if not coverage_summary:
-                logger.warning(f"[{request_id}]   - 未找到coverage_summary")
-                final_result["notification_skip_reason"] = "no_coverage_summary"
+            logger.warning(f"[{request_id}] ⚠️ 跳过飞书通知: 未配置webhook_url")
+            final_result["notification_skip_reason"] = "no_webhook_url"
             final_result["notification_sent"] = False
 
         return final_result
@@ -391,7 +389,7 @@ def _run_local_scan(
 
         logger.info(f"[{request_id}] 找到Maven项目")
 
-        # 4. 检查并创建示例代码（如果项目为空）
+        # 4. 检查项目源代码结构
         logger.info(f"[{request_id}] 检查项目源代码...")
         src_main_java = os.path.join(repo_dir, "src", "main", "java")
         src_test_java = os.path.join(repo_dir, "src", "test", "java")
@@ -413,9 +411,10 @@ def _run_local_scan(
 
         logger.info(f"[{request_id}] 源代码检查结果: 主代码={'✅' if has_main_code else '❌'}, 测试代码={'✅' if has_test_code else '❌'}")
 
-        if not has_main_code or not has_test_code:
-            logger.info(f"[{request_id}] 项目缺少源代码，创建示例代码...")
-            create_sample_code(repo_dir, request_id)
+        if not has_main_code:
+            logger.warning(f"[{request_id}] 项目没有主代码，将继续扫描但可能没有覆盖率数据")
+        if not has_test_code:
+            logger.warning(f"[{request_id}] 项目没有测试代码，覆盖率将为0%")
 
         # 5. 备份并增强pom.xml
         logger.info(f"[{request_id}] 增强pom.xml以支持JaCoCo...")
@@ -590,6 +589,25 @@ def _run_local_scan(
         else:
             logger.warning(f"[{request_id}] 未找到JaCoCo XML报告")
             scan_result["status"] = "no_reports"
+
+            # 即使没有报告，也提供基本的覆盖率信息（0%）
+            scan_result.update({
+                "reports_available": False,
+                "xml_report_path": None,
+                "html_report_available": False,
+                "summary_available": False,
+                "coverage_percentage": 0,
+                "line_coverage": 0,
+                "branch_coverage": 0,
+                "instruction_coverage": 0,
+                "method_coverage": 0,
+                "class_coverage": 0,
+                "lines_covered": 0,
+                "lines_total": 0,
+                "branches_covered": 0,
+                "branches_total": 0
+            })
+            logger.info(f"[{request_id}] 设置默认覆盖率数据（0%）")
 
         return scan_result
 

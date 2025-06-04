@@ -439,6 +439,8 @@ async def generic_exception_handler(_: Request, exc: Exception):
 def start_server():
     """启动服务器"""
     import uvicorn
+    import signal
+    import sys
 
     # 使用固定端口8002避免冲突
     port = 8002
@@ -447,14 +449,26 @@ def start_server():
     logger.info(f"📡 Server will be available at: http://localhost:{port}")
     logger.info(f"📖 API documentation: http://localhost:{port}/docs")
 
+    # 设置信号处理器
+    def signal_handler(signum, frame):
+        logger.info(f"收到信号 {signum}，正在优雅关闭服务...")
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     try:
         uvicorn.run(
             "app:app",
             host="0.0.0.0",
             port=port,
-            reload=config.DEBUG,
-            log_level="info"
+            reload=False,  # 禁用reload避免异步问题
+            log_level="info",
+            access_log=True,
+            loop="asyncio"  # 明确指定事件循环
         )
+    except KeyboardInterrupt:
+        logger.info("🛑 服务被用户中断")
     except OSError as e:
         if "10048" in str(e):  # 端口被占用
             logger.error(f"❌ 端口 {port} 被占用")
@@ -465,6 +479,10 @@ def start_server():
             logger.error(f"❌ 启动失败: {e}")
     except Exception as e:
         logger.error(f"❌ 启动失败: {e}")
+        import traceback
+        logger.error(f"详细错误: {traceback.format_exc()}")
+    finally:
+        logger.info("🔚 服务已关闭")
 
 if __name__ == "__main__":
     start_server()

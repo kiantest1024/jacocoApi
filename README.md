@@ -78,6 +78,10 @@ http://your-server:8002/github/webhook-no-auth
 - `POST /github/webhook-no-auth` - 无签名验证（推荐）
 - `GET /github/test` - 测试端点
 
+### 报告管理
+- `GET /reports` - 列出所有可用的HTML报告
+- `GET /reports/{project}/{commit}/index.html` - 访问具体的HTML报告
+
 ### 健康检查
 - `GET /health` - 服务状态检查
 
@@ -155,6 +159,22 @@ jacocoApi/
 - 📋 **项目信息** - 仓库、分支、提交信息
 - ⏰ **扫描时间** - 扫描完成时间
 - 📊 **详细统计** - 覆盖/总计数量
+- 🔗 **HTML报告链接** - 点击查看详细的可视化报告
+
+### 🌐 **HTML报告功能**
+
+系统会自动生成并托管HTML格式的JaCoCo报告：
+
+- **📊 自动生成** - 每次扫描自动生成HTML报告
+- **🔗 Lark链接** - 通知消息中包含"查看详细报告"按钮
+- **📱 一键访问** - 点击按钮直接在浏览器中查看报告
+- **📂 报告管理** - 按项目和提交ID组织存储
+- **🌍 Web访问** - 通过 `/reports` API查看所有报告
+
+**访问方式**：
+- 通过Lark通知中的按钮直接访问
+- 访问 `http://localhost:8002/reports` 查看所有报告
+- 直接访问 `http://localhost:8002/reports/{项目名}/{提交ID}/index.html`
 
 ## 🔧 故障排除
 

@@ -26,7 +26,8 @@ class FeishuNotifier:
         commit_id: str,
         coverage_data: Dict[str, Any],
         scan_result: Dict[str, Any],
-        request_id: str
+        request_id: str,
+        html_report_url: str = None
     ) -> bool:
         """
         发送 JaCoCo 覆盖率报告到飞书。
@@ -45,7 +46,7 @@ class FeishuNotifier:
         try:
             # 构建消息内容
             message = self._build_jacoco_message(
-                repo_url, branch_name, commit_id, coverage_data, scan_result, request_id
+                repo_url, branch_name, commit_id, coverage_data, scan_result, request_id, html_report_url
             )
             
             # 发送消息
@@ -96,7 +97,8 @@ class FeishuNotifier:
         commit_id: str,
         coverage_data: Dict[str, Any],
         scan_result: Dict[str, Any],
-        request_id: str
+        request_id: str,
+        html_report_url: str = None
     ) -> Dict[str, Any]:
         """构建 JaCoCo 报告消息。"""
         
@@ -159,8 +161,28 @@ class FeishuNotifier:
             }
         }
         
-        # 添加报告链接（如果有）
-        if scan_result.get('reports_dir'):
+        # 添加HTML报告链接按钮（如果有）
+        if html_report_url:
+            message["card"]["elements"].append({
+                "tag": "hr"
+            })
+            message["card"]["elements"].append({
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {
+                            "tag": "plain_text",
+                            "content": "📊 查看详细报告"
+                        },
+                        "type": "primary",
+                        "url": html_report_url
+                    }
+                ]
+            })
+
+        # 添加报告文件信息（如果有）
+        elif scan_result.get('reports_dir'):
             message["card"]["elements"].append({
                 "tag": "hr"
             })
@@ -283,7 +305,8 @@ def send_jacoco_notification(
     commit_id: str,
     coverage_data: Dict[str, Any],
     scan_result: Dict[str, Any],
-    request_id: str
+    request_id: str,
+    html_report_url: str = None
 ) -> bool:
     """
     发送 JaCoCo 覆盖率通知的便捷函数。
@@ -306,7 +329,7 @@ def send_jacoco_notification(
     
     notifier = FeishuNotifier(webhook_url)
     return notifier.send_jacoco_report(
-        repo_url, branch_name, commit_id, coverage_data, scan_result, request_id
+        repo_url, branch_name, commit_id, coverage_data, scan_result, request_id, html_report_url
     )
 
 

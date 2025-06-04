@@ -9,8 +9,9 @@ import time
 import json
 from typing import Dict, Any
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 # 配置
 class Config:
@@ -44,6 +45,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 创建报告存储目录
+REPORTS_BASE_DIR = "./reports"
+os.makedirs(REPORTS_BASE_DIR, exist_ok=True)
+
+# 挂载静态文件服务（用于HTML报告）
+app.mount("/reports", StaticFiles(directory=REPORTS_BASE_DIR), name="reports")
+
 # 通用配置
 DEFAULT_SCAN_CONFIG = {
     "scan_method": "jacoco",
@@ -76,6 +84,43 @@ def get_service_config(repo_url: str) -> Dict[str, Any]:
         "local_repo_path": f"./repos/{project_name}",
     })
     return config
+
+def save_html_report(reports_dir: str, project_name: str, commit_id: str, request_id: str) -> str:
+    """保存HTML报告并返回访问链接"""
+    try:
+        import shutil
+
+        # 创建项目报告目录
+        project_reports_dir = os.path.join(REPORTS_BASE_DIR, project_name)
+        os.makedirs(project_reports_dir, exist_ok=True)
+
+        # 源HTML报告路径
+        source_html_dir = os.path.join(reports_dir, "html")
+        if not os.path.exists(source_html_dir):
+            logger.warning(f"[{request_id}] HTML报告目录不存在: {source_html_dir}")
+            return None
+
+        # 目标路径（使用commit_id作为目录名）
+        target_html_dir = os.path.join(project_reports_dir, commit_id[:8])
+
+        # 如果目标目录已存在，先删除
+        if os.path.exists(target_html_dir):
+            shutil.rmtree(target_html_dir)
+
+        # 复制HTML报告
+        shutil.copytree(source_html_dir, target_html_dir)
+
+        # 生成访问链接
+        report_url = f"/reports/{project_name}/{commit_id[:8]}/index.html"
+
+        logger.info(f"[{request_id}] HTML报告已保存: {target_html_dir}")
+        logger.info(f"[{request_id}] 访问链接: {report_url}")
+
+        return report_url
+
+    except Exception as e:
+        logger.error(f"[{request_id}] 保存HTML报告失败: {str(e)}")
+        return None
 
 # 路由
 @app.get("/")
@@ -184,6 +229,17 @@ async def github_webhook_no_auth(request: Request):
             # 解析报告
             report_data = parse_jacoco_reports(reports_dir, request_id)
 
+            # 保存HTML报告并生成访问链接
+            html_report_url = save_html_report(reports_dir, service_name, commit_id, request_id)
+
+            # 生成完整的HTML报告链接
+            if html_report_url:
+                # 获取服务器地址
+                server_host = "localhost:8002"  # 可以从配置中获取
+                full_html_url = f"http://{server_host}{html_report_url}"
+                report_data['html_report_url'] = full_html_url
+                logger.info(f"[{request_id}] HTML报告链接: {full_html_url}")
+
             # 发送通知
             webhook_url = service_config.get('notification_webhook')
             if webhook_url and 'coverage_summary' in report_data:
@@ -196,7 +252,8 @@ async def github_webhook_no_auth(request: Request):
                         commit_id=commit_id,
                         coverage_data=report_data['coverage_summary'],
                         scan_result=scan_result,
-                        request_id=request_id
+                        request_id=request_id,
+                        html_report_url=report_data.get('html_report_url')  # 传递HTML报告链接
                     )
                     logger.info(f"[{request_id}] 飞书通知已发送")
                 except Exception as notify_error:
@@ -255,12 +312,58 @@ async def github_webhook_no_auth(request: Request):
         logger.error(f"[{request_id}] Webhook processing failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Webhook processing failed: {str(e)}")
 
+@app.get("/reports")
+async def list_reports():
+    """列出所有可用的HTML报告"""
+    try:
+        reports = []
+
+        if os.path.exists(REPORTS_BASE_DIR):
+            for project_name in os.listdir(REPORTS_BASE_DIR):
+                project_dir = os.path.join(REPORTS_BASE_DIR, project_name)
+                if os.path.isdir(project_dir):
+                    project_reports = []
+                    for commit_dir in os.listdir(project_dir):
+                        commit_path = os.path.join(project_dir, commit_dir)
+                        index_file = os.path.join(commit_path, "index.html")
+                        if os.path.isdir(commit_path) and os.path.exists(index_file):
+                            # 获取文件修改时间
+                            mtime = os.path.getmtime(index_file)
+                            project_reports.append({
+                                "commit_id": commit_dir,
+                                "url": f"/reports/{project_name}/{commit_dir}/index.html",
+                                "full_url": f"http://localhost:8002/reports/{project_name}/{commit_dir}/index.html",
+                                "created_time": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(mtime))
+                            })
+
+                    if project_reports:
+                        # 按时间排序，最新的在前
+                        project_reports.sort(key=lambda x: x['created_time'], reverse=True)
+                        reports.append({
+                            "project_name": project_name,
+                            "reports": project_reports
+                        })
+
+        return {
+            "status": "success",
+            "total_projects": len(reports),
+            "reports": reports,
+            "message": "HTML报告列表获取成功"
+        }
+
+    except Exception as e:
+        logger.error(f"获取报告列表失败: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"获取报告列表失败: {str(e)}"}
+        )
+
 @app.get("/config/test")
 async def test_config():
     """测试配置功能"""
     test_url = "https://github.com/user/test-project.git"
     config = get_service_config(test_url)
-    
+
     return {
         "test_url": test_url,
         "generated_config": config,

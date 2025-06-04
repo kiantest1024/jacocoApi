@@ -566,6 +566,12 @@ def _run_local_scan(
                     if result_independent.returncode == 0:
                         logger.info(f"[{request_id}] 独立pom.xml扫描成功")
                         result = result_independent  # 使用独立扫描的结果
+
+                        # 如果没有源代码但Maven成功，创建基本的JaCoCo报告
+                        target_dir = os.path.join(repo_dir, "target")
+                        if not os.path.exists(target_dir):
+                            logger.info(f"[{request_id}] 项目无源代码，创建基本JaCoCo报告...")
+                            create_basic_jacoco_report(repo_dir, request_id)
                     else:
                         logger.warning(f"[{request_id}] 独立pom.xml扫描也失败: {result_independent.stdout}")
 
@@ -754,6 +760,99 @@ def _run_local_scan(
             logger.info(f"[{request_id}] 清理临时目录完成")
         except Exception as cleanup_error:
             logger.warning(f"[{request_id}] 清理失败: {cleanup_error}")
+
+def create_basic_jacoco_report(repo_dir: str, request_id: str):
+    """
+    为没有源代码的项目创建基本的JaCoCo报告
+    """
+    try:
+        # 创建target目录结构
+        target_dir = os.path.join(repo_dir, "target")
+        jacoco_dir = os.path.join(target_dir, "site", "jacoco")
+        os.makedirs(jacoco_dir, exist_ok=True)
+
+        # 创建基本的jacoco.xml报告
+        jacoco_xml_content = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">
+<report name="No Source Code Project">
+    <sessioninfo id="no-source" start="0" dump="0"/>
+    <counter type="INSTRUCTION" missed="0" covered="0"/>
+    <counter type="BRANCH" missed="0" covered="0"/>
+    <counter type="LINE" missed="0" covered="0"/>
+    <counter type="COMPLEXITY" missed="0" covered="0"/>
+    <counter type="METHOD" missed="0" covered="0"/>
+    <counter type="CLASS" missed="0" covered="0"/>
+</report>'''
+
+        jacoco_xml_path = os.path.join(jacoco_dir, "jacoco.xml")
+        with open(jacoco_xml_path, 'w', encoding='utf-8') as f:
+            f.write(jacoco_xml_content)
+
+        # 创建基本的HTML报告
+        html_content = '''<!DOCTYPE html>
+<html>
+<head>
+    <title>JaCoCo Coverage Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { background-color: #f0f0f0; padding: 10px; border-radius: 5px; }
+        .info { margin: 20px 0; padding: 15px; background-color: #e7f3ff; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>JaCoCo Coverage Report</h1>
+        <p>Generated for project with no source code</p>
+    </div>
+    <div class="info">
+        <h2>Project Information</h2>
+        <p><strong>Status:</strong> No Java source code found</p>
+        <p><strong>Coverage:</strong> 0% (No code to analyze)</p>
+        <p><strong>Note:</strong> This project appears to be a configuration or documentation project without Java source code.</p>
+    </div>
+    <table border="1" style="border-collapse: collapse; width: 100%;">
+        <tr style="background-color: #f0f0f0;">
+            <th>Element</th>
+            <th>Missed Instructions</th>
+            <th>Cov.</th>
+            <th>Missed Branches</th>
+            <th>Cov.</th>
+            <th>Missed</th>
+            <th>Cxty</th>
+            <th>Missed</th>
+            <th>Lines</th>
+            <th>Missed</th>
+            <th>Methods</th>
+            <th>Missed</th>
+            <th>Classes</th>
+        </tr>
+        <tr>
+            <td>Total</td>
+            <td>0</td>
+            <td>n/a</td>
+            <td>0</td>
+            <td>n/a</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+            <td>0</td>
+        </tr>
+    </table>
+</body>
+</html>'''
+
+        html_path = os.path.join(jacoco_dir, "index.html")
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        logger.info(f"[{request_id}] 创建基本JaCoCo报告成功: {jacoco_xml_path}")
+
+    except Exception as e:
+        logger.error(f"[{request_id}] 创建基本JaCoCo报告失败: {e}")
 
 def create_independent_pom(repo_dir: str, request_id: str) -> str:
     """

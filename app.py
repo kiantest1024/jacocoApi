@@ -246,6 +246,20 @@ async def github_webhook_no_auth(request: Request):
             # 解析报告
             report_data = parse_jacoco_reports(reports_dir, request_id)
 
+            # 如果解析报告失败但扫描成功，使用扫描结果中的覆盖率数据
+            if not report_data.get('reports_available', False) and scan_result.get('status') in ['completed', 'partial']:
+                logger.info(f"[{request_id}] 使用扫描结果中的覆盖率数据")
+                report_data.update({
+                    'coverage_summary': {
+                        'instruction_coverage': scan_result.get('instruction_coverage', 0),
+                        'branch_coverage': scan_result.get('branch_coverage', 0),
+                        'line_coverage': scan_result.get('line_coverage', 0),
+                        'complexity_coverage': scan_result.get('complexity_coverage', 0),
+                        'method_coverage': scan_result.get('method_coverage', 0),
+                        'class_coverage': scan_result.get('class_coverage', 0)
+                    }
+                })
+
             # 保存HTML报告并生成访问链接
             base_url = get_server_base_url(request)
             html_report_url = save_html_report(reports_dir, service_name, commit_id, request_id, base_url)
@@ -255,24 +269,43 @@ async def github_webhook_no_auth(request: Request):
                 report_data['html_report_url'] = html_report_url
                 logger.info(f"[{request_id}] HTML报告链接: {html_report_url}")
 
-            # 发送通知
+            # 发送通知 - 修改条件，即使没有coverage_summary也发送通知
             webhook_url = service_config.get('notification_webhook')
-            if webhook_url and 'coverage_summary' in report_data:
+            if webhook_url:
                 try:
                     from feishu_notification import send_jacoco_notification
+
+                    # 确保有coverage_data，如果没有则创建默认的
+                    coverage_data = report_data.get('coverage_summary', {
+                        'instruction_coverage': 0,
+                        'branch_coverage': 0,
+                        'line_coverage': 0,
+                        'complexity_coverage': 0,
+                        'method_coverage': 0,
+                        'class_coverage': 0
+                    })
+
+                    logger.info(f"[{request_id}] 准备发送Lark通知...")
+                    logger.info(f"[{request_id}] Webhook URL: {webhook_url}")
+                    logger.info(f"[{request_id}] 覆盖率数据: {coverage_data}")
+
                     send_jacoco_notification(
                         webhook_url=webhook_url,
                         repo_url=repo_url,
                         branch_name=branch_name,
                         commit_id=commit_id,
-                        coverage_data=report_data['coverage_summary'],
+                        coverage_data=coverage_data,
                         scan_result=scan_result,
                         request_id=request_id,
                         html_report_url=report_data.get('html_report_url')  # 传递HTML报告链接
                     )
-                    logger.info(f"[{request_id}] 飞书通知已发送")
+                    logger.info(f"[{request_id}] ✅ 飞书通知已发送")
                 except Exception as notify_error:
-                    logger.warning(f"[{request_id}] 发送通知失败: {notify_error}")
+                    logger.error(f"[{request_id}] ❌ 发送通知失败: {notify_error}")
+                    import traceback
+                    logger.error(f"[{request_id}] 通知错误详情: {traceback.format_exc()}")
+            else:
+                logger.warning(f"[{request_id}] 未配置Lark webhook URL，跳过通知发送")
 
             # 清理临时目录
             try:

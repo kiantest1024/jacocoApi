@@ -122,9 +122,8 @@ mvn clean compile test-compile test jacoco:report \
 if [ $? -ne 0 ]; then
     echo "标准Maven扫描失败，检查是否为父POM问题..."
 
-    # 检查是否是父POM问题
-    if grep -q "Non-resolvable parent POM" /tmp/maven.log 2>/dev/null || \
-       mvn help:effective-pom 2>&1 | grep -q "Non-resolvable parent POM"; then
+    # 检查是否是父POM问题 - 检查Maven输出
+    if mvn help:effective-pom 2>&1 | grep -q "Non-resolvable parent POM"; then
 
         echo "检测到父POM问题，尝试创建独立pom.xml..."
 

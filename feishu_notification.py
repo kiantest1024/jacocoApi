@@ -1,8 +1,8 @@
-import json
 import logging
 import requests
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
+from config import LARK_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -268,34 +268,61 @@ class FeishuNotifier:
     
     def _send_message(self, message: Dict[str, Any]) -> bool:
         """发送消息到飞书。"""
-        
-        try:
-            headers = {
-                'Content-Type': 'application/json'
-            }
-            
-            response = requests.post(
-                self.webhook_url,
-                headers=headers,
-                json=message,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result.get('code') == 0:
-                    logger.info("飞书通知发送成功")
-                    return True
+
+        # 检查是否启用通知
+        if not LARK_CONFIG.get("enable_notifications", True):
+            logger.info("Lark通知已禁用，跳过发送")
+            return True
+
+        retry_count = LARK_CONFIG.get("retry_count", 3)
+        retry_delay = LARK_CONFIG.get("retry_delay", 1)
+        timeout = LARK_CONFIG.get("timeout", 10)
+
+        for attempt in range(retry_count):
+            try:
+                headers = {
+                    'Content-Type': 'application/json'
+                }
+
+                response = requests.post(
+                    self.webhook_url,
+                    headers=headers,
+                    json=message,
+                    timeout=timeout
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('code') == 0:
+                        logger.info("飞书通知发送成功")
+                        return True
+                    else:
+                        logger.error(f"飞书通知发送失败: {result}")
+                        if attempt < retry_count - 1:
+                            logger.info(f"第{attempt + 1}次重试...")
+                            import time
+                            time.sleep(retry_delay)
+                            continue
+                        return False
                 else:
-                    logger.error(f"飞书通知发送失败: {result}")
+                    logger.error(f"飞书通知发送失败，状态码: {response.status_code}")
+                    if attempt < retry_count - 1:
+                        logger.info(f"第{attempt + 1}次重试...")
+                        import time
+                        time.sleep(retry_delay)
+                        continue
                     return False
-            else:
-                logger.error(f"飞书通知发送失败，状态码: {response.status_code}")
+
+            except Exception as e:
+                logger.error(f"发送飞书通知异常: {str(e)}")
+                if attempt < retry_count - 1:
+                    logger.info(f"第{attempt + 1}次重试...")
+                    import time
+                    time.sleep(retry_delay)
+                    continue
                 return False
-                
-        except Exception as e:
-            logger.error(f"发送飞书通知异常: {str(e)}")
-            return False
+
+        return False
 
 
 def send_jacoco_notification(

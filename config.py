@@ -38,11 +38,20 @@ GIT_WEBHOOK_SECRET = settings.GIT_WEBHOOK_SECRET
 CELERY_BROKER_URL = settings.REDIS_URL
 CELERY_RESULT_BACKEND = settings.REDIS_URL
 
+# Lark通知配置
+LARK_CONFIG: Dict[str, Any] = {
+    "webhook_url": os.getenv("LARK_WEBHOOK_URL", "https://open.larksuite.com/open-apis/bot/v2/hook/57031f94-2e1a-473c-8efc-f371b648dfbe"),
+    "enable_notifications": os.getenv("LARK_ENABLE_NOTIFICATIONS", "true").lower() in ("true", "1", "yes"),
+    "timeout": int(os.getenv("LARK_TIMEOUT", "10")),
+    "retry_count": int(os.getenv("LARK_RETRY_COUNT", "3")),
+    "retry_delay": int(os.getenv("LARK_RETRY_DELAY", "1")),
+}
+
 DEFAULT_SCAN_CONFIG: Dict[str, Any] = {
     "scan_method": "docker",  # 优先使用Docker扫描
     "project_type": "maven",
     "docker_image": "jacoco-scanner:latest",
-    "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/57031f94-2e1a-473c-8efc-f371b648dfbe",
+    "notification_webhook": LARK_CONFIG["webhook_url"],  # 从Lark配置中读取
     "coverage_threshold": 50.0,
     "maven_goals": ["clean", "test", "jacoco:report"],
     "report_formats": ["xml", "html", "json"],

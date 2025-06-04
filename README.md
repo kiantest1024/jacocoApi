@@ -87,22 +87,53 @@ http://your-server:8002/github/webhook-no-auth
 
 ## ⚙️ 配置说明
 
+### 环境变量配置
+
+复制 `.env.example` 为 `.env` 并配置：
+
+```bash
+cp .env.example .env
+```
+
+### Lark 通知配置
+
+**环境变量方式（推荐）**：
+```bash
+# .env 文件
+LARK_WEBHOOK_URL=https://open.larksuite.com/open-apis/bot/v2/hook/YOUR_WEBHOOK_ID
+LARK_ENABLE_NOTIFICATIONS=true
+LARK_TIMEOUT=10
+LARK_RETRY_COUNT=3
+LARK_RETRY_DELAY=1
+```
+
+**配置项说明**：
+- `LARK_WEBHOOK_URL` - Lark机器人Webhook URL（必需）
+- `LARK_ENABLE_NOTIFICATIONS` - 是否启用通知（true/false）
+- `LARK_TIMEOUT` - 请求超时时间（秒）
+- `LARK_RETRY_COUNT` - 重试次数
+- `LARK_RETRY_DELAY` - 重试延迟（秒）
+
+### 配置管理工具
+
+```bash
+# 查看当前配置和验证
+python config_manager.py
+
+# 测试Lark连接
+python config_manager.py
+# 然后选择 'y' 测试连接
+```
+
 ### 核心配置 (config.py)
 
 ```python
 DEFAULT_SCAN_CONFIG = {
     "scan_method": "local",           # 扫描方法
-    "notification_webhook": "...",    # Lark Webhook URL
+    "notification_webhook": "...",    # 从环境变量读取
     "sync_mode": True,               # 同步模式
     "coverage_threshold": 50.0       # 覆盖率阈值
 }
-```
-
-### Lark 通知配置
-
-在 `config.py` 中设置您的 Lark 机器人 Webhook URL：
-```python
-"notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/YOUR_WEBHOOK_ID"
 ```
 
 ## 🧪 测试
@@ -110,8 +141,8 @@ DEFAULT_SCAN_CONFIG = {
 运行测试脚本：
 
 ```bash
-# 测试完整功能
-python test_webhook.py
+# 综合功能测试
+python test_all.py
 ```
 
 ### 测试内容
@@ -131,7 +162,9 @@ jacocoApi/
 ├── feishu_notification.py   # 📱 Lark 通知
 ├── security.py              # 🔐 安全认证
 ├── requirements.txt         # 📦 依赖管理
-├── test_webhook.py          # 🧪 测试脚本
+├── config_manager.py         # 🔧 配置管理工具
+├── test_all.py              # 🧪 综合测试脚本
+├── .env.example             # 📝 环境变量示例
 ├── build-docker.sh          # 🐳 Docker构建脚本(Linux/Mac)
 ├── build-docker.bat         # 🐳 Docker构建脚本(Windows)
 ├── docker/                  # 🐳 Docker配置
@@ -140,6 +173,7 @@ jacocoApi/
 │       ├── scan.sh          # 主扫描脚本
 │       ├── enhance-pom.sh   # pom.xml增强脚本
 │       └── generate-summary.sh # 摘要生成脚本
+├── reports/                 # 📊 生成的HTML报告文件
 └── README.md               # 📖 项目文档
 ```
 

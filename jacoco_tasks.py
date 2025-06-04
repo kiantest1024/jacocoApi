@@ -116,39 +116,7 @@ def run_jacoco_scan_docker(
         logger.info(f"[{request_id}] 配置为使用本地扫描")
         scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
 
-    # 处理通知逻辑
-    webhook_url = service_config.get('notification_webhook')
-    logger.info(f"[{request_id}] ==================== 通知调试开始 ====================")
-    logger.info(f"[{request_id}] 检查通知配置:")
-    logger.info(f"[{request_id}]   webhook_url存在: {'✅' if webhook_url else '❌'}")
-    logger.info(f"[{request_id}]   webhook_url长度: {len(webhook_url) if webhook_url else 0}")
-    logger.info(f"[{request_id}]   webhook_url: {webhook_url}")
-    logger.info(f"[{request_id}] service_config keys: {list(service_config.keys())}")
-    logger.info(f"[{request_id}] scan_result keys: {list(scan_result.keys())}")
-
-    # 检查coverage_summary在scan_result中
-    coverage_summary = None
-    if 'coverage_summary' in scan_result:
-        coverage_summary = scan_result['coverage_summary']
-        logger.info(f"[{request_id}] 从scan_result获取coverage_summary")
-    else:
-        # 如果没有coverage_summary，创建一个默认的（可能是0%覆盖率）
-        coverage_summary = {
-            "instruction_coverage": scan_result.get('instruction_coverage', 0),
-            "branch_coverage": scan_result.get('branch_coverage', 0),
-            "line_coverage": scan_result.get('line_coverage', scan_result.get('coverage_percentage', 0)),
-            "complexity_coverage": scan_result.get('complexity_coverage', 0),
-            "method_coverage": scan_result.get('method_coverage', 0),
-            "class_coverage": scan_result.get('class_coverage', 0)
-        }
-        logger.info(f"[{request_id}] 创建默认coverage_summary: {coverage_summary}")
-
-        # 如果所有覆盖率都是0，说明没有测试或没有代码
-        if all(v == 0 for v in coverage_summary.values()):
-            logger.info(f"[{request_id}] 检测到0%覆盖率，可能原因：无测试代码或无主代码")
-
-    # 注意：通知发送已移至app.py中处理，避免重复发送
-    logger.info(f"[{request_id}] 扫描完成，通知将由调用方(app.py)统一处理")
+    # 通知发送由调用方(app.py)统一处理
     scan_result["notification_handled_by_caller"] = True
 
     return scan_result
@@ -427,9 +395,9 @@ def parse_jacoco_xml_file(xml_path: str, request_id: str) -> Dict[str, Any]:
 def _run_local_scan(
     repo_url: str,
     commit_id: str,
-    branch_name: str,
+    branch_name: str,  # 保留以保持接口一致性
     reports_dir: str,
-    service_config: Dict[str, Any],
+    service_config: Dict[str, Any],  # 保留以保持接口一致性
     request_id: str
 ) -> Dict[str, Any]:
     """
@@ -488,7 +456,7 @@ def _run_local_scan(
                     has_test_code = True
                     break
 
-        logger.info(f"[{request_id}] 源代码检查结果: 主代码={'✅' if has_main_code else '❌'}, 测试代码={'✅' if has_test_code else '❌'}")
+        logger.info(f"[{request_id}] 源代码检查结果: 主代码={has_main_code}, 测试代码={has_test_code}")
 
         if not has_main_code:
             logger.warning(f"[{request_id}] 项目没有主代码，将继续扫描但可能没有覆盖率数据")
@@ -707,15 +675,12 @@ def _run_local_scan(
         logger.error(f"[{request_id}] 本地扫描失败: {str(e)}")
         return {"status": "error", "message": str(e), "scan_method": "local"}
     finally:
-        # 延迟清理临时目录以便调试
-        logger.info(f"[{request_id}] 临时目录保留用于调试: {temp_dir}")
-        logger.info(f"[{request_id}] 手动清理命令: rm -rf {temp_dir}")
-        # 注释掉自动清理，便于调试
-        # try:
-        #     shutil.rmtree(temp_dir)
-        #     logger.info(f"[{request_id}] 清理临时目录完成")
-        # except Exception as cleanup_error:
-        #     logger.warning(f"[{request_id}] 清理失败: {cleanup_error}")
+        # 清理临时目录
+        try:
+            shutil.rmtree(temp_dir)
+            logger.info(f"[{request_id}] 清理临时目录完成")
+        except Exception as cleanup_error:
+            logger.warning(f"[{request_id}] 清理失败: {cleanup_error}")
 
 def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
     """

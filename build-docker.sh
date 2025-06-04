@@ -32,33 +32,19 @@ fi
 # 构建镜像
 echo "📦 开始构建Docker镜像..."
 
-# 检测网络环境并选择合适的Dockerfile
-echo "🔍 检测最佳构建方案..."
-
-# 尝试Alpine版本（更轻量，网络问题更少）
-if ping -c 1 dl-cdn.alpinelinux.org &> /dev/null; then
-    echo "🏔️ 使用Alpine Linux版本（推荐）..."
-    DOCKERFILE="docker/Dockerfile.alpine"
-    BUILD_ARGS="--no-cache"
-elif ping -c 1 deb.debian.org &> /dev/null; then
-    echo "🌍 使用官方Debian源..."
-    DOCKERFILE="docker/Dockerfile"
-    BUILD_ARGS="--no-cache"
-elif ping -c 1 mirrors.ustc.edu.cn &> /dev/null; then
-    echo "🇨🇳 使用中国镜像源..."
-    DOCKERFILE="docker/Dockerfile.china"
+# 检测网络环境并选择构建参数
+if ping -c 1 deb.debian.org &> /dev/null; then
+    echo "🌍 使用官方源构建..."
     BUILD_ARGS="--no-cache"
 else
     echo "⚠️ 网络连接异常，尝试使用DNS配置..."
-    DOCKERFILE="docker/Dockerfile"
     BUILD_ARGS="--no-cache --dns=8.8.8.8 --dns=8.8.4.4"
 fi
 
-echo "📦 使用配置: $DOCKERFILE"
 echo "🔧 构建参数: $BUILD_ARGS"
 
 # 构建镜像
-docker build $BUILD_ARGS -t jacoco-scanner:latest -f $DOCKERFILE docker/
+docker build $BUILD_ARGS -t jacoco-scanner:latest -f docker/Dockerfile docker/
 
 if [[ $? -eq 0 ]]; then
     echo "✅ Docker镜像构建成功: jacoco-scanner:latest"

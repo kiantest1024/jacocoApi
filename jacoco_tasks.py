@@ -217,12 +217,34 @@ def _run_docker_scan(
     try:
         logger.info(f"[{request_id}] Executing Docker command: {' '.join(docker_cmd)}")
         
-        result = subprocess.run(
-            docker_cmd,
-            capture_output=True,
-            text=True,
-            timeout=service_config.get('scan_timeout', 1800)
-        )
+        # 使用更短的超时时间，避免长时间卡住
+        timeout_seconds = 300  # 5分钟超时
+        logger.info(f"[{request_id}] Docker扫描超时设置: {timeout_seconds}秒")
+
+        try:
+            result = subprocess.run(
+                docker_cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds
+            )
+        except subprocess.TimeoutExpired:
+            logger.error(f"[{request_id}] Docker扫描超时（{timeout_seconds}秒），强制终止")
+            # 尝试清理可能的僵尸容器
+            try:
+                cleanup_cmd = ["docker", "ps", "-q", "--filter", "ancestor=jacoco-scanner:latest"]
+                cleanup_result = subprocess.run(cleanup_cmd, capture_output=True, text=True, timeout=10)
+                if cleanup_result.stdout.strip():
+                    container_ids = cleanup_result.stdout.strip().split('\n')
+                    for container_id in container_ids:
+                        subprocess.run(["docker", "kill", container_id], capture_output=True, timeout=5)
+                        logger.info(f"[{request_id}] 已终止容器: {container_id}")
+            except Exception as cleanup_error:
+                logger.warning(f"[{request_id}] 清理容器失败: {cleanup_error}")
+
+            # 回退到本地扫描
+            logger.info(f"[{request_id}] Docker超时，回退到本地扫描")
+            return _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
 
         if result.returncode == 0:
             logger.info(f"[{request_id}] Docker scan completed successfully")

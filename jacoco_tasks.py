@@ -339,15 +339,26 @@ def _run_local_scan(
 
         logger.info(f"[{request_id}] 找到Maven项目")
 
-        # 4. 运行Maven测试和JaCoCo
+        # 4. 备份并增强pom.xml
+        logger.info(f"[{request_id}] 增强pom.xml以支持JaCoCo...")
+        pom_backup = os.path.join(repo_dir, "pom.xml.backup")
+        shutil.copy2(pom_path, pom_backup)
+
+        try:
+            enhance_pom_for_jacoco(pom_path, request_id)
+        except Exception as e:
+            logger.warning(f"[{request_id}] pom.xml增强失败: {str(e)}")
+
+        # 5. 运行Maven测试和JaCoCo
         logger.info(f"[{request_id}] 运行Maven测试和JaCoCo...")
 
         maven_cmd = [
-            "mvn", "clean", "test",
-            "org.jacoco:jacoco-maven-plugin:0.8.7:prepare-agent",
-            "org.jacoco:jacoco-maven-plugin:0.8.7:report",
+            "mvn", "clean", "compile", "test-compile", "test",
+            "jacoco:report",
             "-Dmaven.test.failure.ignore=true",
-            "-Dproject.build.sourceEncoding=UTF-8"
+            "-Dproject.build.sourceEncoding=UTF-8",
+            "-Dmaven.compiler.source=11",
+            "-Dmaven.compiler.target=11"
         ]
 
         result = subprocess.run(
@@ -360,9 +371,42 @@ def _run_local_scan(
 
         logger.info(f"[{request_id}] Maven执行完成，返回码: {result.returncode}")
 
-        # 5. 查找并复制JaCoCo报告
-        jacoco_xml = os.path.join(repo_dir, "target", "site", "jacoco", "jacoco.xml")
-        jacoco_html_dir = os.path.join(repo_dir, "target", "site", "jacoco")
+        # 6. 查找并复制JaCoCo报告
+        logger.info(f"[{request_id}] 查找JaCoCo报告...")
+
+        # 可能的报告位置
+        possible_locations = [
+            os.path.join(repo_dir, "target", "site", "jacoco", "jacoco.xml"),
+            os.path.join(repo_dir, "target", "jacoco-reports", "jacoco.xml"),
+            os.path.join(repo_dir, "target", "jacoco", "jacoco.xml"),
+            os.path.join(repo_dir, "target", "reports", "jacoco", "jacoco.xml")
+        ]
+
+        jacoco_xml = None
+        jacoco_html_dir = None
+
+        # 查找XML报告
+        for location in possible_locations:
+            if os.path.exists(location):
+                jacoco_xml = location
+                jacoco_html_dir = os.path.dirname(location)
+                logger.info(f"[{request_id}] 找到JaCoCo XML报告: {location}")
+                break
+
+        # 如果还没找到，搜索整个target目录
+        if not jacoco_xml:
+            logger.info(f"[{request_id}] 在target目录中搜索JaCoCo报告...")
+            target_dir = os.path.join(repo_dir, "target")
+            if os.path.exists(target_dir):
+                for root, _, files in os.walk(target_dir):
+                    for file in files:
+                        if file == "jacoco.xml":
+                            jacoco_xml = os.path.join(root, file)
+                            jacoco_html_dir = root
+                            logger.info(f"[{request_id}] 搜索到JaCoCo XML报告: {jacoco_xml}")
+                            break
+                    if jacoco_xml:
+                        break
 
         scan_result = {
             "status": "completed" if result.returncode == 0 else "partial",
@@ -374,27 +418,32 @@ def _run_local_scan(
 
         os.makedirs(reports_dir, exist_ok=True)
 
-        if os.path.exists(jacoco_xml):
-            logger.info(f"[{request_id}] 找到JaCoCo XML报告")
+        if jacoco_xml and os.path.exists(jacoco_xml):
+            logger.info(f"[{request_id}] 复制JaCoCo报告...")
 
-            # 复制报告到输出目录
+            # 复制XML报告到输出目录
             shutil.copy2(jacoco_xml, reports_dir)
 
-            if os.path.exists(jacoco_html_dir):
+            # 复制HTML报告（如果存在）
+            html_files = [f for f in os.listdir(jacoco_html_dir) if f.endswith('.html')]
+            if html_files:
                 html_output = os.path.join(reports_dir, "html")
-                if os.path.exists(html_output):
-                    shutil.rmtree(html_output)
-                shutil.copytree(jacoco_html_dir, html_output)
+                os.makedirs(html_output, exist_ok=True)
+                for html_file in html_files:
+                    shutil.copy2(os.path.join(jacoco_html_dir, html_file), html_output)
                 logger.info(f"[{request_id}] 复制HTML报告到: {html_output}")
 
             # 解析报告
             try:
                 parsed_reports = parse_jacoco_reports(reports_dir, request_id)
                 scan_result.update(parsed_reports)
+                logger.info(f"[{request_id}] JaCoCo报告解析成功")
             except Exception as e:
                 logger.warning(f"[{request_id}] 解析报告失败: {str(e)}")
         else:
             logger.warning(f"[{request_id}] 未找到JaCoCo报告")
+            logger.info(f"[{request_id}] Maven输出:\n{result.stdout}")
+            logger.info(f"[{request_id}] Maven错误:\n{result.stderr}")
             scan_result["status"] = "no_reports"
 
         return scan_result
@@ -412,3 +461,103 @@ def _run_local_scan(
             logger.info(f"[{request_id}] 清理临时目录完成")
         except Exception as cleanup_error:
             logger.warning(f"[{request_id}] 清理失败: {cleanup_error}")
+
+def enhance_pom_for_jacoco(pom_path: str, request_id: str):
+    """增强pom.xml以支持JaCoCo"""
+    try:
+        import xml.etree.ElementTree as ET
+
+        logger.info(f"[{request_id}] 解析pom.xml...")
+
+        # 读取pom.xml
+        tree = ET.parse(pom_path)
+        root = tree.getroot()
+
+        # 获取命名空间
+        namespace = ''
+        if root.tag.startswith('{'):
+            namespace = root.tag[1:root.tag.index('}')]
+
+        # 注册命名空间
+        if namespace:
+            ET.register_namespace('', namespace)
+            ns = {'maven': namespace}
+        else:
+            ns = {}
+
+        # 查找或创建properties
+        properties = root.find('.//properties' if not namespace else './/maven:properties', ns)
+        if properties is None:
+            properties = ET.SubElement(root, 'properties')
+            logger.info(f"[{request_id}] 创建properties节点")
+
+        # 添加JaCoCo版本属性
+        jacoco_version = properties.find('jacoco.version')
+        if jacoco_version is None:
+            jacoco_version = ET.SubElement(properties, 'jacoco.version')
+            jacoco_version.text = '0.8.7'
+            logger.info(f"[{request_id}] 添加JaCoCo版本属性")
+
+        # 查找或创建build
+        build = root.find('.//build' if not namespace else './/maven:build', ns)
+        if build is None:
+            build = ET.SubElement(root, 'build')
+            logger.info(f"[{request_id}] 创建build节点")
+
+        # 查找或创建plugins
+        plugins = build.find('.//plugins' if not namespace else './/maven:plugins', ns)
+        if plugins is None:
+            plugins = ET.SubElement(build, 'plugins')
+            logger.info(f"[{request_id}] 创建plugins节点")
+
+        # 检查是否已有JaCoCo插件
+        jacoco_plugin_exists = False
+        for plugin in plugins.findall('.//plugin' if not namespace else './/maven:plugin', ns):
+            artifact_id = plugin.find('.//artifactId' if not namespace else './/maven:artifactId', ns)
+            if artifact_id is not None and artifact_id.text == 'jacoco-maven-plugin':
+                jacoco_plugin_exists = True
+                logger.info(f"[{request_id}] JaCoCo插件已存在")
+                break
+
+        if not jacoco_plugin_exists:
+            # 添加JaCoCo插件
+            jacoco_plugin = ET.SubElement(plugins, 'plugin')
+
+            group_id = ET.SubElement(jacoco_plugin, 'groupId')
+            group_id.text = 'org.jacoco'
+
+            artifact_id = ET.SubElement(jacoco_plugin, 'artifactId')
+            artifact_id.text = 'jacoco-maven-plugin'
+
+            version = ET.SubElement(jacoco_plugin, 'version')
+            version.text = '${jacoco.version}'
+
+            executions = ET.SubElement(jacoco_plugin, 'executions')
+
+            # prepare-agent execution
+            execution1 = ET.SubElement(executions, 'execution')
+            ex1_id = ET.SubElement(execution1, 'id')
+            ex1_id.text = 'prepare-agent'
+            goals1 = ET.SubElement(execution1, 'goals')
+            goal1 = ET.SubElement(goals1, 'goal')
+            goal1.text = 'prepare-agent'
+
+            # report execution
+            execution2 = ET.SubElement(executions, 'execution')
+            ex2_id = ET.SubElement(execution2, 'id')
+            ex2_id.text = 'report'
+            ex2_phase = ET.SubElement(execution2, 'phase')
+            ex2_phase.text = 'test'
+            goals2 = ET.SubElement(execution2, 'goals')
+            goal2 = ET.SubElement(goals2, 'goal')
+            goal2.text = 'report'
+
+            logger.info(f"[{request_id}] 添加JaCoCo插件配置")
+
+        # 写回文件
+        tree.write(pom_path, encoding='utf-8', xml_declaration=True)
+        logger.info(f"[{request_id}] pom.xml已增强支持JaCoCo")
+
+    except Exception as e:
+        logger.error(f"[{request_id}] 增强pom.xml失败: {str(e)}")
+        raise

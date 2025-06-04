@@ -9,7 +9,7 @@ from typing import Dict, Any
 from celery import Celery
 
 from config import CELERY_BROKER_URL, CELERY_RESULT_BACKEND
-from feishu_notification import send_jacoco_notification, send_error_notification
+from feishu_notification import send_error_notification
 
 logger = logging.getLogger(__name__)
 
@@ -53,23 +53,37 @@ def run_docker_jacoco_scan(
         webhook_url = service_config.get('notification_webhook')
         logger.info(f"[{request_id}] 检查通知配置: webhook_url={webhook_url}")
         logger.info(f"[{request_id}] report_data keys: {list(report_data.keys())}")
-        logger.info(f"[{request_id}] scan_result keys: {list(scan_result.keys())}")
+        logger.info(f"[{request_id}] final_result keys: {list(final_result.keys())}")
 
-        # 检查coverage_summary在report_data或scan_result中
+        # 检查coverage_summary在report_data或final_result中
         coverage_summary = None
         if 'coverage_summary' in report_data:
             coverage_summary = report_data['coverage_summary']
             logger.info(f"[{request_id}] 从report_data获取coverage_summary")
-        elif 'coverage_summary' in scan_result:
-            coverage_summary = scan_result['coverage_summary']
-            logger.info(f"[{request_id}] 从scan_result获取coverage_summary")
+        elif 'coverage_summary' in final_result:
+            coverage_summary = final_result['coverage_summary']
+            logger.info(f"[{request_id}] 从final_result获取coverage_summary")
+        else:
+            # 如果没有coverage_summary，尝试从覆盖率数据创建一个
+            if 'line_coverage' in final_result or 'coverage_percentage' in final_result:
+                coverage_summary = {
+                    "line_coverage": final_result.get('line_coverage', final_result.get('coverage_percentage', 0)),
+                    "branch_coverage": final_result.get('branch_coverage', 0),
+                    "instruction_coverage": final_result.get('instruction_coverage', 0),
+                    "method_coverage": final_result.get('method_coverage', 0),
+                    "class_coverage": final_result.get('class_coverage', 0)
+                }
+                logger.info(f"[{request_id}] 从覆盖率数据创建coverage_summary: {coverage_summary}")
 
         if webhook_url and coverage_summary:
             try:
                 logger.info(f"[{request_id}] 准备发送飞书通知...")
                 logger.info(f"[{request_id}] coverage_summary: {coverage_summary}")
 
-                send_jacoco_notification(
+                # 导入通知函数
+                from feishu_notification import send_jacoco_notification
+
+                result = send_jacoco_notification(
                     webhook_url=webhook_url,
                     repo_url=repo_url,
                     branch_name=branch_name,
@@ -78,14 +92,29 @@ def run_docker_jacoco_scan(
                     scan_result=final_result,
                     request_id=request_id
                 )
-                logger.info(f"[{request_id}] 飞书通知已发送")
+
+                if result:
+                    logger.info(f"[{request_id}] ✅ 飞书通知发送成功")
+                    final_result["notification_sent"] = True
+                else:
+                    logger.warning(f"[{request_id}] ❌ 飞书通知发送失败（返回False）")
+                    final_result["notification_sent"] = False
+
             except Exception as e:
-                logger.warning(f"[{request_id}] Failed to send notification: {str(e)}")
+                logger.error(f"[{request_id}] ❌ 飞书通知发送异常: {str(e)}")
+                final_result["notification_sent"] = False
+                final_result["notification_error"] = str(e)
+                import traceback
+                logger.error(f"[{request_id}] 通知异常详情: {traceback.format_exc()}")
         else:
+            logger.warning(f"[{request_id}] ⚠️ 跳过飞书通知:")
             if not webhook_url:
-                logger.warning(f"[{request_id}] 未配置webhook_url，跳过通知")
+                logger.warning(f"[{request_id}]   - 未配置webhook_url")
+                final_result["notification_skip_reason"] = "no_webhook_url"
             if not coverage_summary:
-                logger.warning(f"[{request_id}] 未找到coverage_summary，跳过通知")
+                logger.warning(f"[{request_id}]   - 未找到coverage_summary")
+                final_result["notification_skip_reason"] = "no_coverage_summary"
+            final_result["notification_sent"] = False
 
         return final_result
 

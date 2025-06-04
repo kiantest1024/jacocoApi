@@ -401,13 +401,18 @@ def _run_local_scan(
         # 7. 查找并复制JaCoCo报告
         logger.info(f"[{request_id}] 查找JaCoCo报告...")
 
-        # 可能的报告位置
+        # 可能的报告位置（按优先级排序）
         possible_locations = [
             os.path.join(repo_dir, "target", "site", "jacoco", "jacoco.xml"),
             os.path.join(repo_dir, "target", "jacoco-reports", "jacoco.xml"),
             os.path.join(repo_dir, "target", "jacoco", "jacoco.xml"),
             os.path.join(repo_dir, "target", "reports", "jacoco", "jacoco.xml")
         ]
+
+        logger.info(f"[{request_id}] 检查可能的报告位置:")
+        for location in possible_locations:
+            exists = os.path.exists(location)
+            logger.info(f"[{request_id}]   {location}: {'✅' if exists else '❌'}")
 
         jacoco_xml = None
         jacoco_html_dir = None
@@ -446,31 +451,57 @@ def _run_local_scan(
         os.makedirs(reports_dir, exist_ok=True)
 
         if jacoco_xml and os.path.exists(jacoco_xml):
-            logger.info(f"[{request_id}] 复制JaCoCo报告...")
+            logger.info(f"[{request_id}] 找到JaCoCo XML报告: {jacoco_xml}")
 
             # 复制XML报告到输出目录
-            shutil.copy2(jacoco_xml, reports_dir)
+            xml_dest = os.path.join(reports_dir, "jacoco.xml")
+            shutil.copy2(jacoco_xml, xml_dest)
+            logger.info(f"[{request_id}] 复制XML报告到: {xml_dest}")
 
-            # 复制HTML报告（如果存在）
-            html_files = [f for f in os.listdir(jacoco_html_dir) if f.endswith('.html')]
-            if html_files:
+            # 复制整个JaCoCo HTML目录
+            if jacoco_html_dir and os.path.exists(jacoco_html_dir):
                 html_output = os.path.join(reports_dir, "html")
-                os.makedirs(html_output, exist_ok=True)
-                for html_file in html_files:
-                    shutil.copy2(os.path.join(jacoco_html_dir, html_file), html_output)
-                logger.info(f"[{request_id}] 复制HTML报告到: {html_output}")
+                if os.path.exists(html_output):
+                    shutil.rmtree(html_output)
+                shutil.copytree(jacoco_html_dir, html_output)
+                logger.info(f"[{request_id}] 复制完整HTML报告到: {html_output}")
+
+                # 列出复制的文件
+                html_files = []
+                for root, _, files in os.walk(html_output):
+                    for file in files:
+                        rel_path = os.path.relpath(os.path.join(root, file), html_output)
+                        html_files.append(rel_path)
+                logger.info(f"[{request_id}] 复制了 {len(html_files)} 个HTML文件")
+
+            # 复制CSV报告（如果存在）
+            csv_path = os.path.join(jacoco_html_dir, "jacoco.csv")
+            if os.path.exists(csv_path):
+                csv_dest = os.path.join(reports_dir, "jacoco.csv")
+                shutil.copy2(csv_path, csv_dest)
+                logger.info(f"[{request_id}] 复制CSV报告到: {csv_dest}")
 
             # 解析报告
             try:
                 parsed_reports = parse_jacoco_reports(reports_dir, request_id)
                 scan_result.update(parsed_reports)
                 logger.info(f"[{request_id}] JaCoCo报告解析成功")
+
+                # 显示覆盖率摘要
+                if 'report_data' in scan_result:
+                    report_data = scan_result['report_data']
+                    logger.info(f"[{request_id}] 覆盖率摘要:")
+                    logger.info(f"[{request_id}]   行覆盖率: {report_data.get('coverage_percentage', 'N/A')}%")
+                    logger.info(f"[{request_id}]   分支覆盖率: {report_data.get('branch_coverage', 'N/A')}%")
+                    logger.info(f"[{request_id}]   覆盖行数: {report_data.get('lines_covered', 'N/A')}/{report_data.get('lines_total', 'N/A')}")
+
             except Exception as e:
                 logger.warning(f"[{request_id}] 解析报告失败: {str(e)}")
+                # 即使解析失败，也标记为成功，因为报告文件已生成
+                scan_result["status"] = "completed"
+                scan_result["message"] = f"报告生成成功，但解析失败: {str(e)}"
         else:
-            logger.warning(f"[{request_id}] 未找到JaCoCo报告")
-            logger.info(f"[{request_id}] Maven输出:\n{result.stdout}")
-            logger.info(f"[{request_id}] Maven错误:\n{result.stderr}")
+            logger.warning(f"[{request_id}] 未找到JaCoCo XML报告")
             scan_result["status"] = "no_reports"
 
         return scan_result

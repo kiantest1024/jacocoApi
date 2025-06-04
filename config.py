@@ -39,15 +39,15 @@ CELERY_BROKER_URL = settings.REDIS_URL
 CELERY_RESULT_BACKEND = settings.REDIS_URL
 
 DEFAULT_SCAN_CONFIG: Dict[str, Any] = {
-    "scan_method": "local",  # 强制使用本地扫描
+    "scan_method": "docker",  # 优先使用Docker扫描
     "project_type": "maven",
     "docker_image": "jacoco-scanner:latest",
     "notification_webhook": "https://open.larksuite.com/open-apis/bot/v2/hook/57031f94-2e1a-473c-8efc-f371b648dfbe",
     "coverage_threshold": 50.0,
     "maven_goals": ["clean", "test", "jacoco:report"],
     "report_formats": ["xml", "html", "json"],
-    "use_docker": False,  # 禁用Docker
-    "force_local_scan": True,  # 强制本地扫描
+    "use_docker": True,  # 启用Docker（优先）
+    "force_local_scan": False,  # 不强制本地扫描
     "sync_mode": True,  # 启用同步模式用于调试
     "use_incremental_update": True,
     "scan_timeout": 1800,

@@ -5,7 +5,8 @@
 ## 🚀 功能特性
 
 - 🔄 **多平台支持** - 支持 GitHub 和 GitLab webhook
-- 📊 **自动扫描** - 自动生成 JaCoCo 覆盖率报告
+- � **Docker优先** - 优先使用Docker扫描，自动回退到本地扫描
+- �📊 **自动扫描** - 自动生成 JaCoCo 覆盖率报告
 - 🔔 **即时通知** - 支持飞书/Lark 通知推送
 - 🔐 **安全认证** - 支持 webhook 签名验证
 - ⚡ **同步/异步** - 支持同步和异步扫描模式
@@ -27,7 +28,17 @@
 pip install -r requirements.txt
 ```
 
-### 2. 启动服务
+### 2. 构建Docker镜像（推荐）
+
+```bash
+# Linux/Mac
+./build-docker.sh
+
+# Windows
+build-docker.bat
+```
+
+### 3. 启动服务
 
 ```bash
 python app.py
@@ -35,12 +46,30 @@ python app.py
 
 服务将在 `http://localhost:8002` 启动。
 
-### 3. 配置 Webhook
+### 4. 配置 Webhook
 
 在 Git 仓库中配置 webhook URL：
-```
+
+```text
 http://your-server:8002/github/webhook-no-auth
 ```
+
+## 🐳 扫描模式
+
+### Docker扫描（推荐）
+- ✅ **隔离环境** - 在独立容器中执行扫描
+- ✅ **一致性** - 统一的Java和Maven环境
+- ✅ **安全性** - 不影响主机环境
+
+### 本地扫描（回退）
+- ✅ **快速启动** - 无需Docker环境
+- ✅ **直接执行** - 使用主机的Java和Maven
+- ⚠️ **环境依赖** - 需要本地安装Java 11+和Maven 3.6+
+
+### 自动选择策略
+1. **优先Docker** - 检查Docker是否可用
+2. **自动回退** - Docker不可用时使用本地扫描
+3. **强制模式** - 可配置强制使用特定模式
 
 ## 📡 API 接口
 
@@ -89,7 +118,7 @@ python test_webhook.py
 
 ## 📁 项目结构
 
-```
+```text
 jacocoApi/
 ├── app.py                    # 🚀 主应用入口
 ├── config.py                 # ⚙️ 配置管理
@@ -99,6 +128,14 @@ jacocoApi/
 ├── security.py              # 🔐 安全认证
 ├── requirements.txt         # 📦 依赖管理
 ├── test_webhook.py          # 🧪 测试脚本
+├── build-docker.sh          # 🐳 Docker构建脚本(Linux/Mac)
+├── build-docker.bat         # 🐳 Docker构建脚本(Windows)
+├── docker/                  # 🐳 Docker配置
+│   ├── Dockerfile           # Docker镜像定义
+│   └── scripts/             # 容器内脚本
+│       ├── scan.sh          # 主扫描脚本
+│       ├── enhance-pom.sh   # pom.xml增强脚本
+│       └── generate-summary.sh # 摘要生成脚本
 └── README.md               # 📖 项目文档
 ```
 

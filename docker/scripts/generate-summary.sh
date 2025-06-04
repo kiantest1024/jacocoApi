@@ -1,210 +1,114 @@
 #!/bin/bash
 
-# 生成 JaCoCo 报告摘要脚本
-# 从 JaCoCo XML 报告中提取关键信息并生成 JSON 摘要
-
+# 生成JaCoCo覆盖率摘要
 set -e
 
-JACOCO_XML="$1"
-OUTPUT_JSON="$2"
+REPORTS_DIR="$1"
 
-if [[ -z "$JACOCO_XML" || -z "$OUTPUT_JSON" ]]; then
-    echo "用法: $0 <jacoco.xml> <output.json>"
+if [[ -z "$REPORTS_DIR" ]]; then
+    echo "用法: $0 <reports_dir>"
     exit 1
 fi
+
+JACOCO_XML="$REPORTS_DIR/jacoco.xml"
+SUMMARY_JSON="$REPORTS_DIR/summary.json"
 
 if [[ ! -f "$JACOCO_XML" ]]; then
-    echo "错误: JaCoCo XML 文件不存在: $JACOCO_XML"
-    exit 1
-fi
-
-echo "生成 JaCoCo 报告摘要..."
-echo "输入文件: $JACOCO_XML"
-echo "输出文件: $OUTPUT_JSON"
-
-# 创建临时文件
-TEMP_DIR=$(mktemp -d)
-TEMP_XML="$TEMP_DIR/jacoco.xml"
-cp "$JACOCO_XML" "$TEMP_XML"
-
-# 提取总体覆盖率信息
-echo "提取覆盖率信息..."
-
-# 初始化变量
-TOTAL_LINES=0
-COVERED_LINES=0
-TOTAL_BRANCHES=0
-COVERED_BRANCHES=0
-TOTAL_INSTRUCTIONS=0
-COVERED_INSTRUCTIONS=0
-TOTAL_METHODS=0
-COVERED_METHODS=0
-TOTAL_CLASSES=0
-COVERED_CLASSES=0
-
-# 提取计数器信息
-if command -v xmlstarlet >/dev/null 2>&1; then
-    # 使用 xmlstarlet 提取信息
-    echo "使用 xmlstarlet 解析 XML..."
-    
-    # 提取总体计数器
-    while IFS= read -r line; do
-        if [[ -n "$line" ]]; then
-            TYPE=$(echo "$line" | cut -d'|' -f1)
-            MISSED=$(echo "$line" | cut -d'|' -f2)
-            COVERED=$(echo "$line" | cut -d'|' -f3)
-            
-            case "$TYPE" in
-                "LINE")
-                    TOTAL_LINES=$((MISSED + COVERED))
-                    COVERED_LINES=$COVERED
-                    ;;
-                "BRANCH")
-                    TOTAL_BRANCHES=$((MISSED + COVERED))
-                    COVERED_BRANCHES=$COVERED
-                    ;;
-                "INSTRUCTION")
-                    TOTAL_INSTRUCTIONS=$((MISSED + COVERED))
-                    COVERED_INSTRUCTIONS=$COVERED
-                    ;;
-                "METHOD")
-                    TOTAL_METHODS=$((MISSED + COVERED))
-                    COVERED_METHODS=$COVERED
-                    ;;
-                "CLASS")
-                    TOTAL_CLASSES=$((MISSED + COVERED))
-                    COVERED_CLASSES=$COVERED
-                    ;;
-            esac
-        fi
-    done < <(xmlstarlet sel -t -m "//report/counter" -v "@type" -o "|" -v "@missed" -o "|" -v "@covered" -n "$TEMP_XML" 2>/dev/null || echo "")
-    
-    # 如果没有找到报告级别的计数器，尝试汇总包级别的
-    if [[ $TOTAL_LINES -eq 0 ]]; then
-        echo "汇总包级别的覆盖率信息..."
-        while IFS= read -r line; do
-            if [[ -n "$line" ]]; then
-                TYPE=$(echo "$line" | cut -d'|' -f1)
-                MISSED=$(echo "$line" | cut -d'|' -f2)
-                COVERED=$(echo "$line" | cut -d'|' -f3)
-                
-                case "$TYPE" in
-                    "LINE")
-                        TOTAL_LINES=$((TOTAL_LINES + MISSED + COVERED))
-                        COVERED_LINES=$((COVERED_LINES + COVERED))
-                        ;;
-                    "BRANCH")
-                        TOTAL_BRANCHES=$((TOTAL_BRANCHES + MISSED + COVERED))
-                        COVERED_BRANCHES=$((COVERED_BRANCHES + COVERED))
-                        ;;
-                    "INSTRUCTION")
-                        TOTAL_INSTRUCTIONS=$((TOTAL_INSTRUCTIONS + MISSED + COVERED))
-                        COVERED_INSTRUCTIONS=$((COVERED_INSTRUCTIONS + COVERED))
-                        ;;
-                    "METHOD")
-                        TOTAL_METHODS=$((TOTAL_METHODS + MISSED + COVERED))
-                        COVERED_METHODS=$((COVERED_METHODS + COVERED))
-                        ;;
-                    "CLASS")
-                        TOTAL_CLASSES=$((TOTAL_CLASSES + MISSED + COVERED))
-                        COVERED_CLASSES=$((COVERED_CLASSES + COVERED))
-                        ;;
-                esac
-            fi
-        done < <(xmlstarlet sel -t -m "//package/counter" -v "@type" -o "|" -v "@missed" -o "|" -v "@covered" -n "$TEMP_XML" 2>/dev/null || echo "")
-    fi
-else
-    # 使用 grep 和 sed 作为备选方案
-    echo "使用 grep/sed 解析 XML..."
-    
-    # 提取行覆盖率
-    LINE_COUNTER=$(grep 'counter type="LINE"' "$TEMP_XML" | head -1 || echo "")
-    if [[ -n "$LINE_COUNTER" ]]; then
-        TOTAL_LINES=$(echo "$LINE_COUNTER" | sed -n 's/.*missed="\([0-9]*\)".*/\1/p')
-        COVERED_LINES=$(echo "$LINE_COUNTER" | sed -n 's/.*covered="\([0-9]*\)".*/\1/p')
-        TOTAL_LINES=$((TOTAL_LINES + COVERED_LINES))
-    fi
-    
-    # 提取分支覆盖率
-    BRANCH_COUNTER=$(grep 'counter type="BRANCH"' "$TEMP_XML" | head -1 || echo "")
-    if [[ -n "$BRANCH_COUNTER" ]]; then
-        MISSED_BRANCHES=$(echo "$BRANCH_COUNTER" | sed -n 's/.*missed="\([0-9]*\)".*/\1/p')
-        COVERED_BRANCHES=$(echo "$BRANCH_COUNTER" | sed -n 's/.*covered="\([0-9]*\)".*/\1/p')
-        TOTAL_BRANCHES=$((MISSED_BRANCHES + COVERED_BRANCHES))
-    fi
-fi
-
-# 计算百分比
-LINE_COVERAGE=0
-BRANCH_COVERAGE=0
-INSTRUCTION_COVERAGE=0
-METHOD_COVERAGE=0
-CLASS_COVERAGE=0
-
-if [[ $TOTAL_LINES -gt 0 ]]; then
-    LINE_COVERAGE=$(echo "scale=2; $COVERED_LINES * 100 / $TOTAL_LINES" | bc -l 2>/dev/null || echo "0")
-fi
-
-if [[ $TOTAL_BRANCHES -gt 0 ]]; then
-    BRANCH_COVERAGE=$(echo "scale=2; $COVERED_BRANCHES * 100 / $TOTAL_BRANCHES" | bc -l 2>/dev/null || echo "0")
-fi
-
-if [[ $TOTAL_INSTRUCTIONS -gt 0 ]]; then
-    INSTRUCTION_COVERAGE=$(echo "scale=2; $COVERED_INSTRUCTIONS * 100 / $TOTAL_INSTRUCTIONS" | bc -l 2>/dev/null || echo "0")
-fi
-
-if [[ $TOTAL_METHODS -gt 0 ]]; then
-    METHOD_COVERAGE=$(echo "scale=2; $COVERED_METHODS * 100 / $TOTAL_METHODS" | bc -l 2>/dev/null || echo "0")
-fi
-
-if [[ $TOTAL_CLASSES -gt 0 ]]; then
-    CLASS_COVERAGE=$(echo "scale=2; $COVERED_CLASSES * 100 / $TOTAL_CLASSES" | bc -l 2>/dev/null || echo "0")
-fi
-
-# 生成 JSON 摘要
-echo "生成 JSON 摘要..."
-
-cat > "$OUTPUT_JSON" << EOF
+    echo "警告: 未找到JaCoCo XML报告: $JACOCO_XML"
+    # 创建空的摘要
+    cat > "$SUMMARY_JSON" << 'EOF'
 {
-  "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-  "coverage": {
-    "line": {
-      "percentage": $LINE_COVERAGE,
-      "covered": $COVERED_LINES,
-      "total": $TOTAL_LINES
-    },
-    "branch": {
-      "percentage": $BRANCH_COVERAGE,
-      "covered": $COVERED_BRANCHES,
-      "total": $TOTAL_BRANCHES
-    },
-    "instruction": {
-      "percentage": $INSTRUCTION_COVERAGE,
-      "covered": $COVERED_INSTRUCTIONS,
-      "total": $TOTAL_INSTRUCTIONS
-    },
-    "method": {
-      "percentage": $METHOD_COVERAGE,
-      "covered": $COVERED_METHODS,
-      "total": $TOTAL_METHODS
-    },
-    "class": {
-      "percentage": $CLASS_COVERAGE,
-      "covered": $COVERED_CLASSES,
-      "total": $TOTAL_CLASSES
-    }
-  },
-  "summary": {
-    "overall_coverage": $LINE_COVERAGE,
-    "status": "$(if (( $(echo "$LINE_COVERAGE >= 50" | bc -l 2>/dev/null || echo "0") )); then echo "good"; elif (( $(echo "$LINE_COVERAGE >= 30" | bc -l 2>/dev/null || echo "0") )); then echo "fair"; else echo "poor"; fi)"
-  }
+    "instruction_coverage": 0,
+    "branch_coverage": 0,
+    "line_coverage": 0,
+    "complexity_coverage": 0,
+    "method_coverage": 0,
+    "class_coverage": 0,
+    "instructions_covered": 0,
+    "instructions_total": 0,
+    "branches_covered": 0,
+    "branches_total": 0,
+    "lines_covered": 0,
+    "lines_total": 0,
+    "complexity_covered": 0,
+    "complexity_total": 0,
+    "methods_covered": 0,
+    "methods_total": 0,
+    "classes_covered": 0,
+    "classes_total": 0
 }
 EOF
+    exit 0
+fi
 
-# 清理临时文件
-rm -rf "$TEMP_DIR"
+echo "解析JaCoCo XML报告..."
 
-echo "✓ JaCoCo 报告摘要生成完成: $OUTPUT_JSON"
-echo "覆盖率摘要:"
-echo "  行覆盖率: ${LINE_COVERAGE}% (${COVERED_LINES}/${TOTAL_LINES})"
-echo "  分支覆盖率: ${BRANCH_COVERAGE}% (${COVERED_BRANCHES}/${TOTAL_BRANCHES})"
+# 使用Python解析XML并生成JSON摘要
+python3 << EOF
+import xml.etree.ElementTree as ET
+import json
+
+try:
+    tree = ET.parse('$JACOCO_XML')
+    root = tree.getroot()
+    
+    # 初始化计数器
+    counters = {
+        "INSTRUCTION": {"missed": 0, "covered": 0},
+        "BRANCH": {"missed": 0, "covered": 0},
+        "LINE": {"missed": 0, "covered": 0},
+        "COMPLEXITY": {"missed": 0, "covered": 0},
+        "METHOD": {"missed": 0, "covered": 0},
+        "CLASS": {"missed": 0, "covered": 0}
+    }
+    
+    # 解析所有counter元素
+    for counter in root.findall(".//counter"):
+        counter_type = counter.get("type")
+        missed = int(counter.get("missed", 0))
+        covered = int(counter.get("covered", 0))
+        
+        if counter_type in counters:
+            counters[counter_type]["missed"] += missed
+            counters[counter_type]["covered"] += covered
+    
+    # 计算覆盖率
+    def calculate_coverage(counter_data):
+        total = counter_data["missed"] + counter_data["covered"]
+        return (counter_data["covered"] / total * 100) if total > 0 else 0
+    
+    summary = {
+        "instruction_coverage": round(calculate_coverage(counters["INSTRUCTION"]), 2),
+        "branch_coverage": round(calculate_coverage(counters["BRANCH"]), 2),
+        "line_coverage": round(calculate_coverage(counters["LINE"]), 2),
+        "complexity_coverage": round(calculate_coverage(counters["COMPLEXITY"]), 2),
+        "method_coverage": round(calculate_coverage(counters["METHOD"]), 2),
+        "class_coverage": round(calculate_coverage(counters["CLASS"]), 2),
+        "instructions_covered": counters["INSTRUCTION"]["covered"],
+        "instructions_total": counters["INSTRUCTION"]["missed"] + counters["INSTRUCTION"]["covered"],
+        "branches_covered": counters["BRANCH"]["covered"],
+        "branches_total": counters["BRANCH"]["missed"] + counters["BRANCH"]["covered"],
+        "lines_covered": counters["LINE"]["covered"],
+        "lines_total": counters["LINE"]["missed"] + counters["LINE"]["covered"],
+        "complexity_covered": counters["COMPLEXITY"]["covered"],
+        "complexity_total": counters["COMPLEXITY"]["missed"] + counters["COMPLEXITY"]["covered"],
+        "methods_covered": counters["METHOD"]["covered"],
+        "methods_total": counters["METHOD"]["missed"] + counters["METHOD"]["covered"],
+        "classes_covered": counters["CLASS"]["covered"],
+        "classes_total": counters["CLASS"]["missed"] + counters["CLASS"]["covered"]
+    }
+    
+    # 写入JSON文件
+    with open('$SUMMARY_JSON', 'w') as f:
+        json.dump(summary, f, indent=2)
+    
+    print("覆盖率摘要生成完成")
+    print(f"行覆盖率: {summary['line_coverage']:.2f}%")
+    print(f"分支覆盖率: {summary['branch_coverage']:.2f}%")
+    
+except Exception as e:
+    print(f"解析JaCoCo XML失败: {e}")
+    exit(1)
+EOF
+
+echo "摘要生成完成: $SUMMARY_JSON"

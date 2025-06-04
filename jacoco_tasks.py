@@ -94,16 +94,27 @@ def run_jacoco_scan_docker(
     scan_result = None
 
     # 检查是否强制使用本地扫描
-    if service_config.get('force_local_scan', False) or not service_config.get('use_docker', True):
+    if service_config.get('force_local_scan', False):
+        logger.info(f"[{request_id}] 强制使用本地扫描")
+        scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
+    elif service_config.get('use_docker', True):
+        # 优先尝试Docker扫描
+        logger.info(f"[{request_id}] 优先使用Docker扫描")
+
+        # 检查Docker是否可用
+        if _check_docker_available(request_id):
+            try:
+                scan_result = _run_docker_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
+                logger.info(f"[{request_id}] ✅ Docker扫描成功完成")
+            except Exception as docker_error:
+                logger.warning(f"[{request_id}] Docker扫描失败，回退到本地扫描: {str(docker_error)}")
+                scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
+        else:
+            logger.warning(f"[{request_id}] Docker不可用，使用本地扫描")
+            scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
+    else:
         logger.info(f"[{request_id}] 配置为使用本地扫描")
         scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
-    else:
-        # 尝试Docker扫描，失败时回退到本地扫描
-        try:
-            scan_result = _run_docker_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
-        except Exception as docker_error:
-            logger.warning(f"[{request_id}] Docker扫描失败，尝试本地扫描: {str(docker_error)}")
-            scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
 
     # 处理通知逻辑
     webhook_url = service_config.get('notification_webhook')
@@ -185,6 +196,62 @@ def run_jacoco_scan_docker(
     logger.info(f"[{request_id}] ==================== 通知调试结束 ====================")
 
     return scan_result
+
+def _check_docker_available(request_id: str) -> bool:
+    """
+    检查Docker是否可用
+    """
+    try:
+        # 检查Docker命令是否存在
+        result = subprocess.run(
+            ['docker', '--version'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            logger.warning(f"[{request_id}] Docker命令不可用: {result.stderr}")
+            return False
+
+        # 检查Docker守护进程是否运行
+        result = subprocess.run(
+            ['docker', 'info'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            logger.warning(f"[{request_id}] Docker守护进程未运行: {result.stderr}")
+            return False
+
+        # 检查Docker镜像是否存在
+        docker_image = 'jacoco-scanner:latest'
+        result = subprocess.run(
+            ['docker', 'images', '-q', docker_image],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0 or not result.stdout.strip():
+            logger.warning(f"[{request_id}] Docker镜像 {docker_image} 不存在")
+            logger.info(f"[{request_id}] 请先构建Docker镜像: docker build -t {docker_image} -f docker/Dockerfile .")
+            return False
+
+        logger.info(f"[{request_id}] ✅ Docker环境检查通过")
+        return True
+
+    except subprocess.TimeoutExpired:
+        logger.warning(f"[{request_id}] Docker检查超时")
+        return False
+    except FileNotFoundError:
+        logger.warning(f"[{request_id}] Docker命令未找到")
+        return False
+    except Exception as e:
+        logger.warning(f"[{request_id}] Docker检查失败: {str(e)}")
+        return False
 
 def _run_docker_scan(
     repo_url: str,

@@ -1,0 +1,36 @@
+# 简化的JaCoCo扫描器Docker镜像
+# 使用包含Git的基础镜像，避免网络安装问题
+
+FROM maven:3.8.6-openjdk-11
+
+# 设置工作目录
+WORKDIR /app
+
+# 创建必要的目录
+RUN mkdir -p /app/workspace \
+    && mkdir -p /app/configs \
+    && mkdir -p /app/reports \
+    && mkdir -p /app/scripts
+
+# 复制 Maven 配置文件
+COPY maven-configs/ /app/configs/
+
+# 复制扫描脚本
+COPY docker/scripts/ /app/scripts/
+
+# 设置脚本执行权限
+RUN chmod +x /app/scripts/*.sh
+
+# 设置 Maven 本地仓库
+ENV MAVEN_OPTS="-Dmaven.repo.local=/app/.m2/repository"
+
+# 设置环境变量
+ENV JAVA_HOME=/usr/local/openjdk-11
+ENV MAVEN_HOME=/usr/share/maven
+ENV PATH=$PATH:$MAVEN_HOME/bin
+
+# 暴露端口（如果需要）
+EXPOSE 8080
+
+# 默认命令
+CMD ["/app/scripts/scan.sh"]

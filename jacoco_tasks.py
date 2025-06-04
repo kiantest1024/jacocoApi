@@ -100,8 +100,14 @@ def run_jacoco_scan_docker(
     request_id: str
 ) -> Dict[str, Any]:
     """
-    运行JaCoCo扫描，优先使用Docker，失败时回退到本地扫描
+    运行JaCoCo扫描，根据配置选择Docker或本地扫描
     """
+    # 检查是否强制使用本地扫描
+    if service_config.get('force_local_scan', False) or not service_config.get('use_docker', True):
+        logger.info(f"[{request_id}] 配置为使用本地扫描")
+        return _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
+
+    # 尝试Docker扫描，失败时回退到本地扫描
     try:
         return _run_docker_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
     except Exception as docker_error:

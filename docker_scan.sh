@@ -2,11 +2,15 @@
 
 set -e
 
+echo "JaCoCo Docker Scanner Starting..."
+echo "Arguments: $@"
+
 REPO_URL=""
 COMMIT_ID=""
 BRANCH=""
 SERVICE_NAME=""
 
+# 解析参数
 while [[ $# -gt 0 ]]; do
     case $1 in
         --repo-url)
@@ -32,9 +36,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# 验证参数
 if [[ -z "$REPO_URL" || -z "$COMMIT_ID" || -z "$SERVICE_NAME" ]]; then
-    echo "Missing required parameters"
+    echo "❌ Missing required parameters"
     echo "Usage: $0 --repo-url <url> --commit-id <id> --branch <branch> --service-name <name>"
+    echo "Received parameters:"
+    echo "  REPO_URL: $REPO_URL"
+    echo "  COMMIT_ID: $COMMIT_ID"
+    echo "  BRANCH: $BRANCH"
+    echo "  SERVICE_NAME: $SERVICE_NAME"
     exit 1
 fi
 
@@ -58,79 +68,62 @@ if [[ ! -f "pom.xml" ]]; then
     exit 1
 fi
 
-# 增强pom.xml支持JaCoCo
+# 简单的pom.xml增强 - 添加JaCoCo插件
 echo "Enhancing pom.xml for JaCoCo..."
 
-# 创建简单的pom.xml增强脚本
-cat > enhance_pom.py << 'EOF'
-import xml.etree.ElementTree as ET
-import sys
+# 检查是否已有JaCoCo插件
+if grep -q "jacoco-maven-plugin" pom.xml; then
+    echo "JaCoCo plugin already exists in pom.xml"
+else
+    echo "Adding JaCoCo plugin to pom.xml..."
 
-try:
-    # 注册命名空间
-    ET.register_namespace('', 'http://maven.apache.org/POM/4.0.0')
-
-    tree = ET.parse('pom.xml')
-    root = tree.getroot()
-
-    # 定义命名空间
-    ns = {'maven': 'http://maven.apache.org/POM/4.0.0'}
-
-    # 查找或创建build元素
-    build = root.find('maven:build', ns)
-    if build is None:
-        build = ET.SubElement(root, '{http://maven.apache.org/POM/4.0.0}build')
-
-    # 查找或创建plugins元素
-    plugins = build.find('maven:plugins', ns)
-    if plugins is None:
-        plugins = ET.SubElement(build, '{http://maven.apache.org/POM/4.0.0}plugins')
-
-    # 检查是否已有JaCoCo插件
-    jacoco_exists = False
-    for plugin in plugins.findall('maven:plugin', ns):
-        artifact_id = plugin.find('maven:artifactId', ns)
-        if artifact_id is not None and artifact_id.text == 'jacoco-maven-plugin':
-            jacoco_exists = True
-            break
-
-    if not jacoco_exists:
-        # 添加JaCoCo插件
-        plugin = ET.SubElement(plugins, '{http://maven.apache.org/POM/4.0.0}plugin')
-        ET.SubElement(plugin, '{http://maven.apache.org/POM/4.0.0}groupId').text = 'org.jacoco'
-        ET.SubElement(plugin, '{http://maven.apache.org/POM/4.0.0}artifactId').text = 'jacoco-maven-plugin'
-        ET.SubElement(plugin, '{http://maven.apache.org/POM/4.0.0}version').text = '0.8.7'
-
-        executions = ET.SubElement(plugin, '{http://maven.apache.org/POM/4.0.0}executions')
-
-        # prepare-agent execution
-        execution1 = ET.SubElement(executions, '{http://maven.apache.org/POM/4.0.0}execution')
-        ET.SubElement(execution1, '{http://maven.apache.org/POM/4.0.0}id').text = 'prepare-agent'
-        goals1 = ET.SubElement(execution1, '{http://maven.apache.org/POM/4.0.0}goals')
-        ET.SubElement(goals1, '{http://maven.apache.org/POM/4.0.0}goal').text = 'prepare-agent'
-
-        # report execution
-        execution2 = ET.SubElement(executions, '{http://maven.apache.org/POM/4.0.0}execution')
-        ET.SubElement(execution2, '{http://maven.apache.org/POM/4.0.0}id').text = 'report'
-        ET.SubElement(execution2, '{http://maven.apache.org/POM/4.0.0}phase').text = 'test'
-        goals2 = ET.SubElement(execution2, '{http://maven.apache.org/POM/4.0.0}goals')
-        ET.SubElement(goals2, '{http://maven.apache.org/POM/4.0.0}goal').text = 'report'
-
-        print('JaCoCo plugin added to pom.xml')
-    else:
-        print('JaCoCo plugin already exists in pom.xml')
-
-    # 写入文件
-    tree.write('pom.xml', encoding='utf-8', xml_declaration=True)
-    print('POM enhancement completed successfully')
-
-except Exception as e:
-    print(f'POM enhancement failed: {e}')
-    sys.exit(1)
+    # 创建临时的插件配置
+    cat > jacoco_plugin.xml << 'EOF'
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.7</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
 EOF
 
-# 运行pom.xml增强脚本
-python3 enhance_pom.py
+    # 如果没有plugins标签，添加整个build/plugins结构
+    if ! grep -q "<plugins>" pom.xml; then
+        if ! grep -q "<build>" pom.xml; then
+            # 在</project>前添加build部分
+            sed -i '/<\/project>/i\    <build>\n        <plugins>' pom.xml
+            cat jacoco_plugin.xml >> pom.xml
+            echo "        </plugins>" >> pom.xml
+            echo "    </build>" >> pom.xml
+        else
+            # 在</build>前添加plugins部分
+            sed -i '/<\/build>/i\        <plugins>' pom.xml
+            sed -i '/<\/build>/i\        </plugins>' pom.xml
+            sed -i '/        <plugins>/r jacoco_plugin.xml' pom.xml
+        fi
+    else
+        # 在</plugins>前添加插件
+        sed -i '/<\/plugins>/i\' pom.xml
+        sed -i '/<\/plugins>/r jacoco_plugin.xml' pom.xml
+    fi
+
+    rm -f jacoco_plugin.xml
+    echo "JaCoCo plugin added successfully"
+fi
 
 # 运行Maven测试和JaCoCo
 echo "Running Maven test with JaCoCo..."

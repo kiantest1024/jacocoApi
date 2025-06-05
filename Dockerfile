@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
     git \
     maven \
     curl \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
@@ -17,15 +18,12 @@ RUN mkdir -p /app/repos /app/reports /app/scripts
 COPY docker_scan.sh /app/scripts/docker_scan.sh
 RUN chmod +x /app/scripts/docker_scan.sh
 
-# 安装Python3（用于pom.xml增强）
-RUN apt-get update && apt-get install -y python3 && rm -rf /var/lib/apt/lists/*
-
 # 设置Maven配置优化
-ENV MAVEN_OPTS="-Xmx1024m -XX:MaxPermSize=256m"
+ENV MAVEN_OPTS="-Xmx1024m"
 ENV MAVEN_CONFIG="/root/.m2"
 
-# 预下载常用Maven依赖
+# 预下载常用Maven依赖以加速后续构建
 RUN mvn help:evaluate -Dexpression=maven.version -q -DforceStdout || true
 
-# 入口点
-ENTRYPOINT ["/bin/bash", "/app/scripts/docker_scan.sh"]
+# 设置入口点
+ENTRYPOINT ["/app/scripts/docker_scan.sh"]

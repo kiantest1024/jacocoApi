@@ -38,12 +38,24 @@ python app.py
 
 ### 4. 构建Docker镜像（可选）
 ```bash
+# 方法1: 使用构建脚本
 chmod +x build_docker.sh
 ./build_docker.sh
+
+# 方法2: 直接构建
+docker build -t jacoco-scanner:latest .
+
+# 方法3: 自动修复Docker问题
+python fix_docker.py
 ```
 
 ### 5. 测试Docker功能
 ```bash
+# 简单测试
+chmod +x test_docker_simple.sh
+./test_docker_simple.sh
+
+# 完整测试
 python test_docker.py
 ```
 
@@ -91,9 +103,12 @@ jacocoApi/
 ├── lark_notification.py    # Lark通知发送
 ├── test_simple.py      # 简单测试脚本
 ├── test_docker.py      # Docker功能测试脚本
+├── test_docker_simple.sh # 简单Docker测试脚本
+├── fix_docker.py       # Docker问题自动修复脚本
 ├── Dockerfile          # Docker镜像构建文件
 ├── docker_scan.sh      # Docker扫描脚本
 ├── build_docker.sh     # Docker构建脚本
+├── rebuild_docker.sh   # Docker重建脚本
 ├── requirements.txt    # Python依赖
 └── README.md          # 项目文档
 ```

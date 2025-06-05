@@ -54,19 +54,20 @@ python test_simple.py
 
 ## ⚙️ 配置说明
 
-### 基本配置 (config.py)
+### 全局Lark通知配置
+在 `config.py` 中统一配置Lark机器人：
 
 ```python
-DEFAULT_SCAN_CONFIG = {
-    "scan_method": "jacoco",
-    "project_type": "maven",
-    "use_docker": False,  # 使用本地扫描
-    "force_local_scan": True,  # 强制本地扫描
-    "sync_mode": True,  # 同步模式
-    "scan_timeout": 1800,  # 扫描超时时间(秒)
-    "notification_webhook": "your-lark-webhook-url"
+LARK_CONFIG = {
+    "webhook_url": "https://open.larksuite.com/open-apis/bot/v2/hook/your-webhook-id",
+    "enable_notifications": True,
+    "timeout": 10,
+    "retry_count": 3,
+    "retry_delay": 1,
 }
 ```
+
+所有项目将使用此全局配置发送通知，确保通知的一致性。
 
 ## 🔧 项目结构
 
@@ -75,7 +76,7 @@ jacocoApi/
 ├── app.py              # 主应用文件
 ├── config.py           # 配置管理
 ├── jacoco_tasks.py     # 扫描任务处理
-├── feishu_notification.py  # 通知发送
+├── lark_notification.py    # Lark通知发送
 ├── test_simple.py      # 简单测试脚本
 ├── requirements.txt    # Python依赖
 └── README.md          # 项目文档

@@ -7,9 +7,9 @@ from config import LARK_CONFIG
 logger = logging.getLogger(__name__)
 
 
-class FeishuNotifier:
-    def __init__(self, webhook_url: str):
-        self.webhook_url = webhook_url
+class LarkNotifier:
+    def __init__(self, webhook_url: str = None):
+        self.webhook_url = webhook_url or LARK_CONFIG["webhook_url"]
         
     def send_jacoco_report(
         self, repo_url: str, branch_name: str, commit_id: str,
@@ -33,28 +33,11 @@ class FeishuNotifier:
         error_message: str,
         request_id: str
     ) -> bool:
-        """
-        发送错误通知到lark。
-        
-        参数:
-            repo_url: 仓库 URL
-            branch_name: 分支名称
-            commit_id: 提交 ID
-            error_message: 错误消息
-            request_id: 请求 ID
-            
-        返回:
-            是否发送成功
-        """
         try:
-            # 构建错误消息
             message = self._build_error_message(
                 repo_url, branch_name, commit_id, error_message, request_id
             )
-            
-            # 发送消息
             return self._send_message(message)
-            
         except Exception as e:
             logger.error(f"[{request_id}] 发送lark错误通知失败: {str(e)}")
             return False
@@ -69,7 +52,6 @@ class FeishuNotifier:
         request_id: str,
         html_report_url: str = None
     ) -> Dict[str, Any]:
-        """构建 JaCoCo 报告消息。"""
         
         # 提取覆盖率数据
         instruction_coverage = coverage_data.get('instruction_coverage', 0)
@@ -184,7 +166,6 @@ class FeishuNotifier:
         error_message: str,
         request_id: str
     ) -> Dict[str, Any]:
-        """构建错误通知消息。"""
         
         # 获取仓库名称
         repo_name = repo_url.split('/')[-1].replace('.git', '')
@@ -236,7 +217,6 @@ class FeishuNotifier:
         return message
     
     def _send_message(self, message: Dict[str, Any]) -> bool:
-        """发送消息到lark。"""
 
         # 检查是否启用通知
         if not LARK_CONFIG.get("enable_notifications", True):
@@ -295,67 +275,38 @@ class FeishuNotifier:
 
 
 def send_jacoco_notification(
-    webhook_url: str,
     repo_url: str,
     branch_name: str,
     commit_id: str,
     coverage_data: Dict[str, Any],
     scan_result: Dict[str, Any],
     request_id: str,
-    html_report_url: str = None
+    html_report_url: str = None,
+    webhook_url: str = None
 ) -> bool:
-    """
-    发送 JaCoCo 覆盖率通知的便捷函数。
-    
-    参数:
-        webhook_url: lark机器人 webhook URL
-        repo_url: 仓库 URL
-        branch_name: 分支名称
-        commit_id: 提交 ID
-        coverage_data: 覆盖率数据
-        scan_result: 扫描结果
-        request_id: 请求 ID
-        
-    返回:
-        是否发送成功
-    """
-    if not webhook_url:
+    if not webhook_url and not LARK_CONFIG.get("webhook_url"):
         logger.warning(f"[{request_id}] 未配置lark webhook URL，跳过通知")
         return False
     
-    notifier = FeishuNotifier(webhook_url)
+    notifier = LarkNotifier(webhook_url)
     return notifier.send_jacoco_report(
         repo_url, branch_name, commit_id, coverage_data, scan_result, request_id, html_report_url
     )
 
 
 def send_error_notification(
-    webhook_url: str,
     repo_url: str,
     branch_name: str,
     commit_id: str,
     error_message: str,
-    request_id: str
+    request_id: str,
+    webhook_url: str = None
 ) -> bool:
-    """
-    发送错误通知的便捷函数。
-    
-    参数:
-        webhook_url: lark机器人 webhook URL
-        repo_url: 仓库 URL
-        branch_name: 分支名称
-        commit_id: 提交 ID
-        error_message: 错误消息
-        request_id: 请求 ID
-        
-    返回:
-        是否发送成功
-    """
-    if not webhook_url:
+    if not webhook_url and not LARK_CONFIG.get("webhook_url"):
         logger.warning(f"[{request_id}] 未配置lark webhook URL，跳过错误通知")
         return False
     
-    notifier = FeishuNotifier(webhook_url)
+    notifier = LarkNotifier(webhook_url)
     return notifier.send_error_notification(
         repo_url, branch_name, commit_id, error_message, request_id
     )

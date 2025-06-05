@@ -233,7 +233,7 @@ def github_webhook_no_auth(request: Request):
             webhook_url = service_config.get('notification_webhook')
             if webhook_url:
                 try:
-                    from feishu_notification import send_jacoco_notification
+                    from lark_notification import send_jacoco_notification
 
                     # 确保有coverage_data，如果没有则创建默认的
                     coverage_data = report_data.get('coverage_summary', {

@@ -76,94 +76,117 @@ fi
 
 echo "Maven project confirmed"
 
-# 创建完整的pom.xml以确保JaCoCo正常工作
-echo "Creating enhanced pom.xml for JaCoCo..."
+# 保留原始pom.xml并智能增强
+echo "Enhancing original pom.xml for JaCoCo..."
 
 # 备份原始pom.xml
 cp pom.xml pom.xml.original
 
-# 创建新的pom.xml，确保包含所有必要的配置
-cat > pom.xml << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
+echo "Original pom.xml content:"
+cat pom.xml
 
-    <groupId>com.example</groupId>
-    <artifactId>jacocotest</artifactId>
-    <version>1.0.0</version>
-    <packaging>jar</packaging>
+# 检查原始pom.xml是否已有JaCoCo插件
+if grep -q "jacoco-maven-plugin" pom.xml; then
+    echo "JaCoCo plugin already exists, keeping original pom.xml"
+else
+    echo "Adding JaCoCo plugin to existing pom.xml..."
 
-    <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <jacoco.version>0.8.8</jacoco.version>
-    </properties>
+    # 使用Python脚本智能增强pom.xml
+    python3 << 'EOF'
+import xml.etree.ElementTree as ET
+import sys
 
-    <dependencies>
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.13.2</version>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
+try:
+    # 解析原始pom.xml
+    tree = ET.parse('pom.xml')
+    root = tree.getroot()
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.8.1</version>
-                <configuration>
-                    <source>11</source>
-                    <target>11</target>
-                </configuration>
-            </plugin>
+    # 定义命名空间
+    ns = {'maven': 'http://maven.apache.org/POM/4.0.0'}
+    ET.register_namespace('', 'http://maven.apache.org/POM/4.0.0')
 
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.0.0-M7</version>
-                <configuration>
-                    <includes>
-                        <include>**/*Test.java</include>
-                        <include>**/*Tests.java</include>
-                        <include>**/Test*.java</include>
-                    </includes>
-                    <argLine>${argLine}</argLine>
-                </configuration>
-            </plugin>
+    # 确保有properties元素
+    properties = root.find('maven:properties', ns)
+    if properties is None:
+        properties = ET.SubElement(root, '{http://maven.apache.org/POM/4.0.0}properties')
 
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>${jacoco.version}</version>
-                <executions>
-                    <execution>
-                        <id>prepare-agent</id>
-                        <goals>
-                            <goal>prepare-agent</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>report</id>
-                        <phase>test</phase>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
-</project>
+    # 添加JaCoCo版本属性
+    jacoco_version = properties.find('maven:jacoco.version', ns)
+    if jacoco_version is None:
+        jacoco_version = ET.SubElement(properties, '{http://maven.apache.org/POM/4.0.0}jacoco.version')
+        jacoco_version.text = '0.8.8'
+
+    # 确保有build元素
+    build = root.find('maven:build', ns)
+    if build is None:
+        build = ET.SubElement(root, '{http://maven.apache.org/POM/4.0.0}build')
+
+    # 确保有plugins元素
+    plugins = build.find('maven:plugins', ns)
+    if plugins is None:
+        plugins = ET.SubElement(build, '{http://maven.apache.org/POM/4.0.0}plugins')
+
+    # 添加或更新surefire插件
+    surefire_found = False
+    for plugin in plugins.findall('maven:plugin', ns):
+        artifact_id = plugin.find('maven:artifactId', ns)
+        if artifact_id is not None and artifact_id.text == 'maven-surefire-plugin':
+            surefire_found = True
+            # 确保有argLine配置
+            config = plugin.find('maven:configuration', ns)
+            if config is None:
+                config = ET.SubElement(plugin, '{http://maven.apache.org/POM/4.0.0}configuration')
+            argline = config.find('maven:argLine', ns)
+            if argline is None:
+                argline = ET.SubElement(config, '{http://maven.apache.org/POM/4.0.0}argLine')
+                argline.text = '${argLine}'
+            break
+
+    if not surefire_found:
+        # 添加surefire插件
+        surefire_plugin = ET.SubElement(plugins, '{http://maven.apache.org/POM/4.0.0}plugin')
+        ET.SubElement(surefire_plugin, '{http://maven.apache.org/POM/4.0.0}groupId').text = 'org.apache.maven.plugins'
+        ET.SubElement(surefire_plugin, '{http://maven.apache.org/POM/4.0.0}artifactId').text = 'maven-surefire-plugin'
+        ET.SubElement(surefire_plugin, '{http://maven.apache.org/POM/4.0.0}version').text = '3.0.0-M7'
+        config = ET.SubElement(surefire_plugin, '{http://maven.apache.org/POM/4.0.0}configuration')
+        ET.SubElement(config, '{http://maven.apache.org/POM/4.0.0}argLine').text = '${argLine}'
+
+    # 添加JaCoCo插件
+    jacoco_plugin = ET.SubElement(plugins, '{http://maven.apache.org/POM/4.0.0}plugin')
+    ET.SubElement(jacoco_plugin, '{http://maven.apache.org/POM/4.0.0}groupId').text = 'org.jacoco'
+    ET.SubElement(jacoco_plugin, '{http://maven.apache.org/POM/4.0.0}artifactId').text = 'jacoco-maven-plugin'
+    ET.SubElement(jacoco_plugin, '{http://maven.apache.org/POM/4.0.0}version').text = '${jacoco.version}'
+
+    executions = ET.SubElement(jacoco_plugin, '{http://maven.apache.org/POM/4.0.0}executions')
+
+    # prepare-agent execution
+    execution1 = ET.SubElement(executions, '{http://maven.apache.org/POM/4.0.0}execution')
+    ET.SubElement(execution1, '{http://maven.apache.org/POM/4.0.0}id').text = 'prepare-agent'
+    goals1 = ET.SubElement(execution1, '{http://maven.apache.org/POM/4.0.0}goals')
+    ET.SubElement(goals1, '{http://maven.apache.org/POM/4.0.0}goal').text = 'prepare-agent'
+
+    # report execution
+    execution2 = ET.SubElement(executions, '{http://maven.apache.org/POM/4.0.0}execution')
+    ET.SubElement(execution2, '{http://maven.apache.org/POM/4.0.0}id').text = 'report'
+    ET.SubElement(execution2, '{http://maven.apache.org/POM/4.0.0}phase').text = 'test'
+    goals2 = ET.SubElement(execution2, '{http://maven.apache.org/POM/4.0.0}goals')
+    ET.SubElement(goals2, '{http://maven.apache.org/POM/4.0.0}goal').text = 'report'
+
+    # 写入增强的pom.xml
+    tree.write('pom.xml', encoding='utf-8', xml_declaration=True)
+    print('POM enhancement completed successfully')
+
+except Exception as e:
+    print(f'POM enhancement failed: {e}')
+    # 如果增强失败，恢复原始文件
+    import shutil
+    shutil.copy2('pom.xml.original', 'pom.xml')
+    print('Restored original pom.xml')
 EOF
+fi
 
-echo "Enhanced pom.xml created successfully"
+echo "Enhanced pom.xml content:"
+cat pom.xml
 
 # 运行Maven测试和JaCoCo
 echo "Running Maven with JaCoCo..."
@@ -180,18 +203,35 @@ mvn -version
 
 # 分步执行以便调试
 echo "Step 1: Clean and compile"
-mvn clean compile -Dmaven.test.failure.ignore=true --batch-mode || echo "Compile step completed with warnings"
+mvn clean compile -Dmaven.test.failure.ignore=true --batch-mode -e || echo "Compile step completed with warnings"
 
 echo "Step 2: Compile tests"
-mvn test-compile -Dmaven.test.failure.ignore=true --batch-mode || echo "Test compile step completed with warnings"
+mvn test-compile -Dmaven.test.failure.ignore=true --batch-mode -e || echo "Test compile step completed with warnings"
 
 echo "Step 3: Run tests with JaCoCo"
-mvn test -Dmaven.test.failure.ignore=true --batch-mode || echo "Test step completed with warnings"
+echo "Running: mvn test -Dmaven.test.failure.ignore=true --batch-mode"
+mvn test -Dmaven.test.failure.ignore=true --batch-mode -e || echo "Test step completed with warnings"
 
 echo "Step 4: Generate JaCoCo report"
-mvn jacoco:report --batch-mode || echo "Report generation completed with warnings"
+echo "Running: mvn jacoco:report --batch-mode"
+mvn jacoco:report --batch-mode -e || echo "Report generation completed with warnings"
 
 echo "Maven execution completed"
+
+# 显示Maven属性和JaCoCo agent信息
+echo "=== JaCoCo Agent Information ==="
+echo "Checking if JaCoCo agent was properly set..."
+if [ -f "target/jacoco.exec" ]; then
+    echo "JaCoCo exec file exists: $(ls -la target/jacoco.exec)"
+    echo "Exec file content (first 100 bytes):"
+    hexdump -C target/jacoco.exec | head -5
+else
+    echo "No JaCoCo exec file found - this indicates JaCoCo agent was not attached"
+fi
+
+# 检查Maven属性
+echo "=== Maven Properties ==="
+mvn help:evaluate -Dexpression=argLine -q -DforceStdout 2>/dev/null || echo "argLine property not set"
 
 # 显示详细的执行结果
 echo "=== Maven Execution Results ==="

@@ -43,25 +43,18 @@ class LarkNotifier:
             return False
     
     def _build_jacoco_message(
-        self,
-        repo_url: str,
-        branch_name: str,
-        commit_id: str,
-        coverage_data: Dict[str, Any],
-        scan_result: Dict[str, Any],
-        request_id: str,
-        html_report_url: str = None
+        self, repo_url: str, branch_name: str, commit_id: str,
+        coverage_data: Dict[str, Any], scan_result: Dict[str, Any],
+        request_id: str, html_report_url: str = None
     ) -> Dict[str, Any]:
-        
-        # 提取覆盖率数据
+
         instruction_coverage = coverage_data.get('instruction_coverage', 0)
         branch_coverage = coverage_data.get('branch_coverage', 0)
         line_coverage = coverage_data.get('line_coverage', 0)
         complexity_coverage = coverage_data.get('complexity_coverage', 0)
         method_coverage = coverage_data.get('method_coverage', 0)
         class_coverage = coverage_data.get('class_coverage', 0)
-        
-        # 确定覆盖率等级和颜色
+
         avg_coverage = (line_coverage + branch_coverage) / 2
         if avg_coverage >= 80:
             coverage_level = "优秀"
@@ -72,22 +65,14 @@ class LarkNotifier:
         else:
             coverage_level = "需改进"
             color = "red"
-        
-        # 获取仓库名称
+
         repo_name = repo_url.split('/')[-1].replace('.git', '')
-        
-        # 构建富文本消息
         message = {
             "msg_type": "interactive",
             "card": {
-                "config": {
-                    "wide_screen_mode": True
-                },
+                "config": {"wide_screen_mode": True},
                 "header": {
-                    "title": {
-                        "tag": "plain_text",
-                        "content": f"📊 JaCoCo 覆盖率报告 - {repo_name}"
-                    },
+                    "title": {"tag": "plain_text", "content": f"📊 JaCoCo 覆盖率报告 - {repo_name}"},
                     "template": color
                 },
                 "elements": [
@@ -98,9 +83,7 @@ class LarkNotifier:
                             "content": f"**仓库**: {repo_name}\n**分支**: {branch_name}\n**提交**: `{commit_id[:8]}`\n**时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                         }
                     },
-                    {
-                        "tag": "hr"
-                    },
+                    {"tag": "hr"},
                     {
                         "tag": "div",
                         "text": {

@@ -15,30 +15,10 @@ def run_jacoco_scan_docker(
     service_config: Dict[str, Any],
     request_id: str
 ) -> Dict[str, Any]:
-    """
-    运行JaCoCo扫描，根据配置选择Docker或本地扫描，并处理通知
-    """
-    # 执行扫描
-    scan_result = None
-
-    # 检查是否强制使用本地扫描
-    if service_config.get('force_local_scan', False):
-        logger.info(f"[{request_id}] 强制使用本地扫描")
-        scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
-    else:
-        logger.info(f"[{request_id}] 使用本地扫描")
-        scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
-
-    # 通知发送由调用方(app.py)统一处理
+    logger.info(f"[{request_id}] 使用本地扫描")
+    scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
     scan_result["notification_handled_by_caller"] = True
-
     return scan_result
-
-
-
-
-
-
 
 def parse_jacoco_reports(reports_dir: str, request_id: str) -> Dict[str, Any]:
     logger.info(f"[{request_id}] Parsing JaCoCo reports: {reports_dir}")
@@ -63,7 +43,6 @@ def parse_jacoco_reports(reports_dir: str, request_id: str) -> Dict[str, Any]:
             coverage_data = parse_jacoco_xml_file(jacoco_xml_path, request_id)
             result.update(coverage_data)
 
-            # 创建coverage_summary字段用于通知系统
             result["coverage_summary"] = {
                 "instruction_coverage": coverage_data.get('instruction_coverage', 0),
                 "branch_coverage": coverage_data.get('branch_coverage', 0),
@@ -72,7 +51,6 @@ def parse_jacoco_reports(reports_dir: str, request_id: str) -> Dict[str, Any]:
                 "method_coverage": coverage_data.get('method_coverage', 0),
                 "class_coverage": coverage_data.get('class_coverage', 0)
             }
-            logger.info(f"[{request_id}] 创建coverage_summary用于通知系统")
 
         except Exception as e:
             logger.warning(f"[{request_id}] Failed to parse XML report: {str(e)}")
@@ -103,7 +81,6 @@ def parse_jacoco_xml_file(xml_path: str, request_id: str) -> Dict[str, Any]:
         tree = ET.parse(xml_path)
         root = tree.getroot()
 
-        # 初始化所有覆盖率指标
         counters = {
             "INSTRUCTION": {"missed": 0, "covered": 0},
             "BRANCH": {"missed": 0, "covered": 0},
@@ -113,7 +90,6 @@ def parse_jacoco_xml_file(xml_path: str, request_id: str) -> Dict[str, Any]:
             "CLASS": {"missed": 0, "covered": 0}
         }
 
-        # 解析所有counter元素
         for counter in root.findall(".//counter"):
             counter_type = counter.get("type")
             missed = int(counter.get("missed", 0))
@@ -123,7 +99,6 @@ def parse_jacoco_xml_file(xml_path: str, request_id: str) -> Dict[str, Any]:
                 counters[counter_type]["missed"] += missed
                 counters[counter_type]["covered"] += covered
 
-        # 计算各项覆盖率
         def calculate_coverage(counter_data):
             total = counter_data["missed"] + counter_data["covered"]
             return (counter_data["covered"] / total * 100) if total > 0 else 0
@@ -136,16 +111,13 @@ def parse_jacoco_xml_file(xml_path: str, request_id: str) -> Dict[str, Any]:
         class_coverage = calculate_coverage(counters["CLASS"])
 
         result = {
-            # 主要覆盖率指标
-            "coverage_percentage": round(line_coverage, 2),  # 保持向后兼容
+            "coverage_percentage": round(line_coverage, 2),
             "instruction_coverage": round(instruction_coverage, 2),
             "branch_coverage": round(branch_coverage, 2),
             "line_coverage": round(line_coverage, 2),
             "complexity_coverage": round(complexity_coverage, 2),
             "method_coverage": round(method_coverage, 2),
             "class_coverage": round(class_coverage, 2),
-
-            # 详细统计数据
             "instructions_covered": counters["INSTRUCTION"]["covered"],
             "instructions_total": counters["INSTRUCTION"]["missed"] + counters["INSTRUCTION"]["covered"],
             "branches_covered": counters["BRANCH"]["covered"],

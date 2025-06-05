@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Universal JaCoCo Scanner API
-通用JaCoCo代码覆盖率扫描服务
-"""
-
 import os
 import logging
 import time
@@ -14,14 +8,10 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-# 日志配置
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# FastAPI应用
 app = FastAPI(title="Universal JaCoCo Scanner API", version="2.0.0")
-
-# CORS中间件
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 REPORTS_BASE_DIR = "./reports"
@@ -44,44 +34,26 @@ def get_server_base_url(request: Request = None) -> str:
     return "http://localhost:8002"
 
 def save_html_report(reports_dir: str, project_name: str, commit_id: str, request_id: str, base_url: str = None) -> str:
-    """保存HTML报告并返回访问链接"""
     try:
         import shutil
-
-        # 创建项目报告目录
         project_reports_dir = os.path.join(REPORTS_BASE_DIR, project_name)
         os.makedirs(project_reports_dir, exist_ok=True)
 
-        # 源HTML报告路径
         source_html_dir = os.path.join(reports_dir, "html")
         if not os.path.exists(source_html_dir):
             logger.warning(f"[{request_id}] HTML报告目录不存在: {source_html_dir}")
             return None
 
-        # 目标路径（使用commit_id作为目录名）
         target_html_dir = os.path.join(project_reports_dir, commit_id[:8])
-
-        # 如果目标目录已存在，先删除
         if os.path.exists(target_html_dir):
             shutil.rmtree(target_html_dir)
 
-        # 复制HTML报告
         shutil.copytree(source_html_dir, target_html_dir)
-
-        # 生成访问链接
         relative_url = f"/reports/{project_name}/{commit_id[:8]}/index.html"
-
-        # 如果提供了base_url，生成完整URL，否则返回相对URL
-        if base_url:
-            full_url = f"{base_url}{relative_url}"
-        else:
-            full_url = relative_url
+        full_url = f"{base_url}{relative_url}" if base_url else relative_url
 
         logger.info(f"[{request_id}] HTML报告已保存: {target_html_dir}")
-        logger.info(f"[{request_id}] 访问链接: {full_url}")
-
         return full_url
-
     except Exception as e:
         logger.error(f"[{request_id}] 保存HTML报告失败: {str(e)}")
         return None
@@ -107,34 +79,24 @@ async def health_check():
 
 @app.post("/github/webhook-no-auth")
 def github_webhook_no_auth(request: Request):
-    """GitHub/GitLab webhook处理（完全同步版本）"""
     try:
-        # 生成请求ID
         request_id = f"req_{int(time.time())}"
 
-        # 获取请求体 - 同步方式（使用FastAPI的内部机制）
         import asyncio
         try:
-            # 尝试获取当前事件循环
             loop = asyncio.get_running_loop()
-            # 如果在事件循环中，创建新的任务
             body = loop.run_until_complete(request.body())
         except RuntimeError:
-            # 如果没有运行的事件循环，直接运行
             body = asyncio.run(request.body())
 
         if not body:
             raise HTTPException(status_code=400, detail="Empty request body")
-        
+
         payload = json.loads(body)
-        
-        # 检测webhook类型
         event_type = "unknown"
         repo_url = None
         commit_id = None
         branch_name = "main"
-        
-        # GitLab webhook
         if "object_kind" in payload:
             event_type = "gitlab_push"
             if payload.get("object_kind") == "push":
@@ -142,25 +104,18 @@ def github_webhook_no_auth(request: Request):
                 project_name = project.get("name", "unknown")
                 user_name = payload.get("user_name", "user")
 
-                # 尝试获取完整URL，如果没有则构造一个
                 repo_url = project.get("http_url") or project.get("ssh_url") or project.get("web_url")
                 if not repo_url:
-                    # 构造默认URL（基于您的GitLab服务器）
                     if project_name.lower() in ["jacocotest", "jacocoTest"]:
                         repo_url = f"http://172.16.1.30/{user_name.lower()}/{project_name.lower()}.git"
                     else:
                         repo_url = f"http://172.16.1.30/{user_name}/{project_name}.git"
 
                 commits = payload.get("commits", [])
-                if commits:
-                    commit_id = commits[0].get("id", "unknown")
-                else:
-                    commit_id = payload.get("after", "unknown")
-
+                commit_id = commits[0].get("id", "unknown") if commits else payload.get("after", "unknown")
                 ref = payload.get("ref", "refs/heads/main")
                 branch_name = ref.replace("refs/heads/", "") if ref.startswith("refs/heads/") else "main"
-        
-        # GitHub webhook
+
         elif "repository" in payload:
             event_type = "github_push"
             repo_url = payload.get("repository", {}).get("clone_url")
@@ -170,40 +125,30 @@ def github_webhook_no_auth(request: Request):
         
         if not repo_url:
             raise HTTPException(status_code=400, detail="Cannot extract repository URL from webhook")
-        
-        # 获取配置
+
         service_config = get_service_config(repo_url)
         service_name = service_config['service_name']
 
-
-        
         logger.info(f"[{request_id}] Webhook received: {event_type}")
         logger.info(f"[{request_id}] Repository: {repo_url}")
         logger.info(f"[{request_id}] Project: {service_name}")
         logger.info(f"[{request_id}] Commit: {commit_id}")
         logger.info(f"[{request_id}] Branch: {branch_name}")
-        
-        # 强制使用同步扫描（确保立即执行）
+
         logger.info(f"[{request_id}] 使用同步扫描模式")
 
-        # 完全同步扫描
         try:
             from jacoco_tasks import run_jacoco_scan_docker, parse_jacoco_reports
             import tempfile
 
-            # 创建临时报告目录
             reports_dir = tempfile.mkdtemp(prefix=f"jacoco_reports_{request_id}_")
             logger.info(f"[{request_id}] 开始同步 JaCoCo 扫描...")
 
-            # 直接执行同步扫描操作
             scan_result = run_jacoco_scan_docker(
                 repo_url, commit_id, branch_name, reports_dir, service_config, request_id
             )
 
-            # 直接解析报告
             report_data = parse_jacoco_reports(reports_dir, request_id)
-
-            # 调试：显示解析的报告数据
             logger.info(f"[{request_id}] 报告解析结果: {report_data}")
 
             # 如果解析报告失败但扫描成功，使用扫描结果中的覆盖率数据

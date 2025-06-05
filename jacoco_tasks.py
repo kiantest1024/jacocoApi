@@ -258,41 +258,13 @@ def _run_local_scan(
         src_main_java = os.path.join(repo_dir, "src", "main", "java")
         src_test_java = os.path.join(repo_dir, "src", "test", "java")
 
-        has_main_code = False
-        has_test_code = False
-        main_java_files = []
-        test_java_files = []
-
-        # 检查主代码
-        if os.path.exists(src_main_java):
-            for root, _, files in os.walk(src_main_java):
-                for file in files:
-                    if file.endswith('.java'):
-                        main_java_files.append(os.path.join(root, file))
-                        has_main_code = True
-
-        # 检查测试代码
-        if os.path.exists(src_test_java):
-            for root, _, files in os.walk(src_test_java):
-                for file in files:
-                    if file.endswith('.java'):
-                        test_java_files.append(os.path.join(root, file))
-                        has_test_code = True
+        has_main_code = os.path.exists(src_main_java) and any(f.endswith('.java') for _, _, files in os.walk(src_main_java) for f in files)
+        has_test_code = os.path.exists(src_test_java) and any(f.endswith('.java') for _, _, files in os.walk(src_test_java) for f in files)
 
         logger.info(f"[{request_id}] 源代码检查结果: 主代码={has_main_code}, 测试代码={has_test_code}")
-        logger.info(f"[{request_id}] 主代码文件数: {len(main_java_files)}")
-        logger.info(f"[{request_id}] 测试代码文件数: {len(test_java_files)}")
-
-        # 显示找到的文件（前3个）
-        if main_java_files:
-            sample_main = [os.path.relpath(f, repo_dir) for f in main_java_files[:3]]
-            logger.info(f"[{request_id}] 主代码示例: {sample_main}")
-        if test_java_files:
-            sample_test = [os.path.relpath(f, repo_dir) for f in test_java_files[:3]]
-            logger.info(f"[{request_id}] 测试代码示例: {sample_test}")
 
         if not has_main_code:
-            logger.warning(f"[{request_id}] 项目没有主代码，将继续扫描但可能没有覆盖率数据")
+            logger.warning(f"[{request_id}] 项目没有主代码")
         if not has_test_code:
             logger.warning(f"[{request_id}] 项目没有测试代码，覆盖率将为0%")
 
@@ -315,135 +287,28 @@ def _run_local_scan(
         # 6. 运行Maven测试和JaCoCo
         logger.info(f"[{request_id}] 运行Maven测试和JaCoCo...")
 
-        # 首先尝试离线模式，如果失败则使用在线模式
-        logger.info(f"[{request_id}] 执行JaCoCo扫描（优化版本）")
-
-        # 离线模式命令
-        maven_cmd_offline = [
-            "mvn", "clean", "compile", "test-compile", "test",
-            "jacoco:report",
+        maven_cmd = [
+            "mvn", "clean", "test", "jacoco:report",
             "-Dmaven.test.failure.ignore=true",
             "-Dproject.build.sourceEncoding=UTF-8",
-            "-Dmaven.compiler.source=11",
-            "-Dmaven.compiler.target=11",
-            "-o",  # 离线模式
             "--batch-mode"
         ]
 
-        # 在线模式命令（备用）
-        maven_cmd_online = [
-            "mvn", "clean", "compile", "test-compile", "test",
-            "jacoco:report",
-            "-Dmaven.test.failure.ignore=true",
-            "-Dproject.build.sourceEncoding=UTF-8",
-            "-Dmaven.compiler.source=11",
-            "-Dmaven.compiler.target=11",
-            "--batch-mode",
-            "-Dmaven.wagon.http.retryHandler.count=2"
-        ]
-
-        # 先尝试离线模式
-        logger.info(f"[{request_id}] 尝试离线模式扫描...")
         result = subprocess.run(
-            maven_cmd_offline,
+            maven_cmd,
             cwd=repo_dir,
             capture_output=True,
             text=True,
-            timeout=300  # 离线模式应该很快
+            timeout=600
         )
 
-        # 如果离线模式失败，使用在线模式
-        if result.returncode != 0:
-            logger.warning(f"[{request_id}] 离线模式失败，切换到在线模式...")
-            result = subprocess.run(
-                maven_cmd_online,
-                cwd=repo_dir,
-                capture_output=True,
-                text=True,
-                timeout=600  # 在线模式允许更长时间
-            )
-
         logger.info(f"[{request_id}] Maven执行完成，返回码: {result.returncode}")
-        logger.info(f"[{request_id}] Maven输出:\n{result.stdout}")
-        logger.info(f"[{request_id}] Maven错误:\n{result.stderr}")
+        if result.returncode != 0:
+            logger.warning(f"[{request_id}] Maven执行失败: {result.stderr}")
 
-        # 检查是否是依赖解析问题并尝试回退方案
-        if result.returncode != 0 and "Non-resolvable parent POM" in result.stdout:
-            logger.warning(f"[{request_id}] 检测到父POM解析问题，尝试创建独立pom.xml...")
-
-            # 创建独立的pom.xml，不依赖父POM
-            try:
-                independent_pom_content = create_independent_pom(repo_dir, request_id)
-                if independent_pom_content:
-                    # 备份原始pom.xml
-                    original_pom = os.path.join(repo_dir, "pom.xml")
-                    backup_pom = os.path.join(repo_dir, "pom.xml.backup")
-                    shutil.copy2(original_pom, backup_pom)
-
-                    # 写入独立pom.xml
-                    with open(original_pom, 'w', encoding='utf-8') as f:
-                        f.write(independent_pom_content)
-
-                    logger.info(f"[{request_id}] 创建独立pom.xml成功，重新尝试Maven扫描...")
-
-                    # 使用独立pom.xml重新扫描 - 简化版本
-                    maven_cmd_independent = [
-                        "mvn", "clean", "compile", "test-compile", "test",
-                        "jacoco:report",
-                        "-Dmaven.test.failure.ignore=true",
-                        "-Dproject.build.sourceEncoding=UTF-8",
-                        "-Dmaven.compiler.source=11",
-                        "-Dmaven.compiler.target=11",
-                        "-Dcheckstyle.skip=true",
-                        "-Dpmd.skip=true",
-                        "-Dspotbugs.skip=true"
-                    ]
-
-                    result_independent = subprocess.run(
-                        maven_cmd_independent,
-                        cwd=repo_dir,
-                        capture_output=True,
-                        text=True,
-                        timeout=600
-                    )
-
-                    logger.info(f"[{request_id}] 独立pom.xml扫描完成，返回码: {result_independent.returncode}")
-                    if result_independent.returncode == 0:
-                        logger.info(f"[{request_id}] 独立pom.xml扫描成功")
-                        result = result_independent  # 使用独立扫描的结果
-
-                        # 如果没有源代码但Maven成功，创建基本的JaCoCo报告
-                        target_dir = os.path.join(repo_dir, "target")
-                        if not os.path.exists(target_dir):
-                            logger.info(f"[{request_id}] 项目无源代码，创建基本JaCoCo报告...")
-                            create_basic_jacoco_report(repo_dir, request_id)
-                    else:
-                        logger.warning(f"[{request_id}] 独立pom.xml扫描也失败: {result_independent.stdout}")
-
-                    # 恢复原始pom.xml
-                    shutil.copy2(backup_pom, original_pom)
-                    os.remove(backup_pom)
-
-            except Exception as e:
-                logger.warning(f"[{request_id}] 独立pom.xml方案异常: {e}")
-
-        # 7. 检查target目录内容
+        # 7. 检查target目录
         target_dir = os.path.join(repo_dir, "target")
-        if os.path.exists(target_dir):
-            logger.info(f"[{request_id}] target目录存在，列出内容...")
-            try:
-                for root, _, files in os.walk(target_dir):
-                    level = root.replace(target_dir, '').count(os.sep)
-                    indent = ' ' * 2 * level
-                    logger.info(f"[{request_id}] {indent}{os.path.basename(root)}/")
-                    subindent = ' ' * 2 * (level + 1)
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        file_size = os.path.getsize(file_path)
-                        logger.info(f"[{request_id}] {subindent}{file} ({file_size} bytes)")
-            except Exception as e:
-                logger.warning(f"[{request_id}] 列出target目录失败: {e}")
-        else:
+        if not os.path.exists(target_dir):
             logger.warning(f"[{request_id}] target目录不存在")
 
         # 8. 查找并复制JaCoCo报告

@@ -4,10 +4,10 @@ JaCoCo代码覆盖率扫描服务，支持GitHub和GitLab webhook触发。
 
 ## 🚀 主要特性
 
-- 支持任何Maven项目，无需修改项目配置
+- 支持Maven项目自动扫描
 - 支持GitHub和GitLab webhook
-- Docker扫描优先，自动回退到本地扫描
-- 自动生成HTML/XML覆盖率报告
+- Docker扫描优先，本地扫描回退
+- 自动生成HTML/XML报告
 - 自动发送Lark通知
 
 ## 📋 工作流程
@@ -38,15 +38,8 @@ python app.py
 
 ### 4. 构建Docker镜像（可选）
 ```bash
-# 使用构建脚本
 chmod +x build_docker.sh
 ./build_docker.sh
-
-# 或直接构建
-docker build -t jacoco-scanner:latest .
-
-# 或自动修复
-python fix_docker.py
 ```
 
 ### 5. 测试功能
@@ -68,14 +61,7 @@ python test_simple.py
 
 ## ⚙️ 配置说明
 
-在 `config.py` 中配置Lark通知：
-
-```python
-LARK_CONFIG = {
-    "webhook_url": "https://open.larksuite.com/open-apis/bot/v2/hook/your-webhook-id",
-    "enable_notifications": True,
-}
-```
+在 `config.py` 中配置Lark通知URL。
 
 ## 🔧 项目结构
 
@@ -86,7 +72,6 @@ jacocoApi/
 ├── jacoco_tasks.py     # 扫描任务
 ├── lark_notification.py # Lark通知
 ├── test_simple.py      # 测试脚本
-├── fix_docker.py       # Docker修复
 ├── Dockerfile          # Docker镜像
 ├── docker_scan.sh      # Docker扫描
 ├── build_docker.sh     # Docker构建

@@ -1,8 +1,6 @@
 #!/bin/bash
 
-# 不使用 set -e，手动处理错误
 echo "JaCoCo Docker Scanner Starting..."
-echo "Arguments: $@"
 
 REPO_URL=""
 COMMIT_ID=""
@@ -37,13 +35,7 @@ done
 
 # 验证参数
 if [[ -z "$REPO_URL" || -z "$COMMIT_ID" || -z "$SERVICE_NAME" ]]; then
-    echo "❌ Missing required parameters"
     echo "Usage: $0 --repo-url <url> --commit-id <id> --branch <branch> --service-name <name>"
-    echo "Received parameters:"
-    echo "  REPO_URL: $REPO_URL"
-    echo "  COMMIT_ID: $COMMIT_ID"
-    echo "  BRANCH: $BRANCH"
-    echo "  SERVICE_NAME: $SERVICE_NAME"
     exit 1
 fi
 
@@ -296,63 +288,13 @@ mvn jacoco:report --batch-mode -e || echo "Report generation completed with warn
 
 echo "Maven execution completed"
 
-# 显示Maven属性和JaCoCo agent信息
-echo "=== JaCoCo Agent Information ==="
-echo "Checking if JaCoCo agent was properly set..."
-if [ -f "target/jacoco.exec" ]; then
-    echo "JaCoCo exec file exists: $(ls -la target/jacoco.exec)"
-    echo "Exec file content (first 100 bytes):"
-    hexdump -C target/jacoco.exec | head -5
-else
-    echo "No JaCoCo exec file found - this indicates JaCoCo agent was not attached"
-fi
 
-# 检查Maven属性
-echo "=== Maven Properties ==="
-mvn help:evaluate -Dexpression=argLine -q -DforceStdout 2>/dev/null || echo "argLine property not set"
-
-# 显示详细的执行结果
-echo "=== Maven Execution Results ==="
-
-echo "Target directory contents:"
-if [ -d "target" ]; then
-    find target -type f | head -20
-else
-    echo "No target directory found"
-fi
-
-echo "Surefire reports:"
-if [ -d "target/surefire-reports" ]; then
-    ls -la target/surefire-reports/
-    echo "Test results:"
-    find target/surefire-reports -name "*.xml" -exec grep -l "testcase" {} \; | head -5
-else
-    echo "No surefire reports found"
-fi
-
-echo "JaCoCo files:"
-find target -name "jacoco*" -type f | head -10
-
-echo "JaCoCo exec file:"
-if [ -f "target/jacoco.exec" ]; then
-    ls -la target/jacoco.exec
-    echo "Exec file size: $(wc -c < target/jacoco.exec) bytes"
-else
-    echo "No jacoco.exec file found"
-fi
 
 # 查找并复制报告
 REPORTS_DIR="/app/reports"
 mkdir -p "$REPORTS_DIR"
 
-# 显示target目录结构用于调试
-echo "Checking target directory structure..."
-if [ -d "target" ]; then
-    find target -type f -name "*.xml" -o -name "*.exec" | head -10
-    echo "Target directory size: $(du -sh target 2>/dev/null || echo 'unknown')"
-else
-    echo "Warning: target directory not found"
-fi
+
 
 # 查找JaCoCo报告文件
 echo "Looking for JaCoCo reports..."
@@ -381,10 +323,6 @@ echo "  jacoco HTML dir: $JACOCO_HTML_DIR"
 if [[ -n "$JACOCO_XML" ]]; then
     echo "Found JaCoCo XML report: $JACOCO_XML"
     cp "$JACOCO_XML" "$REPORTS_DIR/jacoco.xml"
-
-    # 显示XML文件内容的前几行用于调试
-    echo "XML report preview:"
-    head -10 "$JACOCO_XML"
 
     # 查找HTML报告目录
     if [[ -n "$JACOCO_HTML_DIR" && -d "$JACOCO_HTML_DIR" ]]; then
@@ -424,8 +362,6 @@ elif [[ -n "$JACOCO_EXEC" ]]; then
     if [[ -n "$JACOCO_XML" ]]; then
         echo "Successfully generated XML report: $JACOCO_XML"
         cp "$JACOCO_XML" "$REPORTS_DIR/jacoco.xml"
-        echo "XML report preview:"
-        head -10 "$JACOCO_XML"
     else
         echo "Failed to generate XML report, creating empty report"
         echo '<?xml version="1.0" encoding="UTF-8"?><report name="empty"><counter type="INSTRUCTION" missed="0" covered="0"/></report>' > "$REPORTS_DIR/jacoco.xml"

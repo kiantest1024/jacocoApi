@@ -18,10 +18,6 @@ REPORTS_BASE_DIR = "./reports"
 os.makedirs(REPORTS_BASE_DIR, exist_ok=True)
 app.mount("/reports", StaticFiles(directory=REPORTS_BASE_DIR), name="reports")
 
-def get_project_name_from_url(repo_url: str) -> str:
-    url = repo_url.replace('.git', '')
-    return url.split('/')[-1] if '/' in url else url
-
 def get_service_config(repo_url: str) -> Dict[str, Any]:
     from config import get_service_config as config_get_service_config
     return config_get_service_config(repo_url)
@@ -62,10 +58,9 @@ def save_html_report(reports_dir: str, project_name: str, commit_id: str, reques
 @app.get("/")
 async def root():
     return {
-        "message": "Universal JaCoCo Scanner API is running",
+        "message": "JaCoCo Scanner API",
         "version": "2.0.0",
-        "docs": "/docs",
-        "health": "/health"
+        "docs": "/docs"
     }
 
 @app.get("/health")

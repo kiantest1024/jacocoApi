@@ -68,21 +68,72 @@ if [[ ! -f "pom.xml" ]]; then
     exit 1
 fi
 
-# 简单的pom.xml增强 - 添加JaCoCo插件
-echo "Enhancing pom.xml for JaCoCo..."
+# 创建完整的pom.xml以确保JaCoCo正常工作
+echo "Creating enhanced pom.xml for JaCoCo..."
 
-# 检查是否已有JaCoCo插件
-if grep -q "jacoco-maven-plugin" pom.xml; then
-    echo "JaCoCo plugin already exists in pom.xml"
-else
-    echo "Adding JaCoCo plugin to pom.xml..."
+# 备份原始pom.xml
+cp pom.xml pom.xml.original
 
-    # 创建临时的插件配置
-    cat > jacoco_plugin.xml << 'EOF'
+# 创建新的pom.xml，确保包含所有必要的配置
+cat > pom.xml << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.example</groupId>
+    <artifactId>jacocotest</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <jacoco.version>0.8.8</jacoco.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>11</source>
+                    <target>11</target>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.0.0-M7</version>
+                <configuration>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/Test*.java</include>
+                    </includes>
+                    <argLine>${argLine}</argLine>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.8</version>
+                <version>${jacoco.version}</version>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
@@ -98,62 +149,71 @@ else
                         </goals>
                     </execution>
                 </executions>
-                <configuration>
-                    <outputDirectory>${project.reporting.outputDirectory}/jacoco</outputDirectory>
-                </configuration>
             </plugin>
+        </plugins>
+    </build>
+</project>
 EOF
 
-    # 如果没有plugins标签，添加整个build/plugins结构
-    if ! grep -q "<plugins>" pom.xml; then
-        if ! grep -q "<build>" pom.xml; then
-            # 在</project>前添加build部分
-            sed -i '/<\/project>/i\    <build>\n        <plugins>' pom.xml
-            cat jacoco_plugin.xml >> pom.xml
-            echo "        </plugins>" >> pom.xml
-            echo "    </build>" >> pom.xml
-        else
-            # 在</build>前添加plugins部分
-            sed -i '/<\/build>/i\        <plugins>' pom.xml
-            sed -i '/<\/build>/i\        </plugins>' pom.xml
-            sed -i '/        <plugins>/r jacoco_plugin.xml' pom.xml
-        fi
-    else
-        # 在</plugins>前添加插件
-        sed -i '/<\/plugins>/i\' pom.xml
-        sed -i '/<\/plugins>/r jacoco_plugin.xml' pom.xml
-    fi
-
-    rm -f jacoco_plugin.xml
-    echo "JaCoCo plugin added successfully"
-fi
+echo "Enhanced pom.xml created successfully"
 
 # 运行Maven测试和JaCoCo
-echo "Running Maven test with JaCoCo..."
+echo "Running Maven with JaCoCo..."
 
-# 首先编译项目
-echo "Compiling project..."
-mvn clean compile \
-    -Dmaven.test.failure.ignore=true \
-    -Dproject.build.sourceEncoding=UTF-8 \
-    -Dmaven.compiler.source=11 \
-    -Dmaven.compiler.target=11 \
-    --batch-mode
+# 确保使用正确的Java版本
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+export PATH=$JAVA_HOME/bin:$PATH
 
-# 运行测试
-echo "Running tests..."
-mvn test \
-    -Dmaven.test.failure.ignore=true \
-    -Dproject.build.sourceEncoding=UTF-8 \
-    --batch-mode
+echo "Java version:"
+java -version
 
-# 生成JaCoCo报告
-echo "Generating JaCoCo report..."
-mvn jacoco:report \
-    -Dmaven.test.failure.ignore=true \
-    --batch-mode
+echo "Maven version:"
+mvn -version
+
+# 分步执行以便调试
+echo "Step 1: Clean and compile"
+mvn clean compile -Dmaven.test.failure.ignore=true --batch-mode
+
+echo "Step 2: Compile tests"
+mvn test-compile -Dmaven.test.failure.ignore=true --batch-mode
+
+echo "Step 3: Run tests with JaCoCo"
+mvn test -Dmaven.test.failure.ignore=true --batch-mode
+
+echo "Step 4: Generate JaCoCo report"
+mvn jacoco:report --batch-mode
 
 echo "Maven execution completed"
+
+# 显示详细的执行结果
+echo "=== Maven Execution Results ==="
+
+echo "Target directory contents:"
+if [ -d "target" ]; then
+    find target -type f | head -20
+else
+    echo "No target directory found"
+fi
+
+echo "Surefire reports:"
+if [ -d "target/surefire-reports" ]; then
+    ls -la target/surefire-reports/
+    echo "Test results:"
+    find target/surefire-reports -name "*.xml" -exec grep -l "testcase" {} \; | head -5
+else
+    echo "No surefire reports found"
+fi
+
+echo "JaCoCo files:"
+find target -name "jacoco*" -type f | head -10
+
+echo "JaCoCo exec file:"
+if [ -f "target/jacoco.exec" ]; then
+    ls -la target/jacoco.exec
+    echo "Exec file size: $(wc -c < target/jacoco.exec) bytes"
+else
+    echo "No jacoco.exec file found"
+fi
 
 # 查找并复制报告
 REPORTS_DIR="/app/reports"

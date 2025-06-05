@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  jacoco-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+    container_name: jacoco-scanner-api
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./reports:/app/reports
+      - /var/run/docker.sock:/var/run/docker.sock  # 允许容器内使用Docker
+    environment:
+      - PORT=8002
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - jacoco-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  jacoco-network:
+    driver: bridge
+
+volumes:
+  jacoco-reports:
+    driver: local

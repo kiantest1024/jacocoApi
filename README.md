@@ -36,14 +36,42 @@ python app.py
 - Content type: `application/json`
 - Events: Push events
 
-### 4. 构建Docker镜像（可选）
+### 4. Docker部署（推荐）
+
+#### 方式1: 快速部署
 ```bash
-chmod +x build_docker.sh
-./build_docker.sh
+chmod +x quick-deploy.sh
+./quick-deploy.sh
 ```
 
-### 5. 测试功能
+#### 方式2: Docker Compose部署
 ```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+#### 方式3: 手动Docker部署
+```bash
+# 构建镜像
+docker build -f Dockerfile.service -t jacoco-scanner-api .
+
+# 运行容器
+docker run -d \
+  --name jacoco-scanner-api \
+  -p 8002:8002 \
+  -v $(pwd)/reports:/app/reports \
+  jacoco-scanner-api
+```
+
+### 5. 本地开发
+```bash
+# 安装依赖
+pip install -r requirements.txt
+
+# 启动服务
+python app.py
+
+# 测试功能
 python test_simple.py
 ```
 
@@ -72,14 +100,54 @@ jacocoApi/
 ├── jacoco_tasks.py     # 扫描任务
 ├── lark_notification.py # Lark通知
 ├── test_simple.py      # 测试脚本
-├── Dockerfile          # Docker镜像
-├── docker_scan.sh      # Docker扫描
-├── build_docker.sh     # Docker构建
-├── requirements.txt    # 依赖文件
-└── README.md          # 文档
+├── Dockerfile          # Docker扫描镜像
+├── Dockerfile.service  # API服务镜像
+├── docker-compose.yml  # Docker Compose配置
+├── deploy.sh           # 完整部署脚本
+├── quick-deploy.sh     # 快速部署脚本
+├── docker_scan.sh      # Docker扫描脚本
+├── entrypoint.sh       # Docker入口点
+├── build_docker.sh     # 扫描镜像构建
+├── requirements.txt    # Python依赖
+├── .dockerignore       # Docker忽略文件
+└── README.md          # 项目文档
 ```
 
-## 📊 覆盖率报告
+## � Docker部署说明
+
+### 部署方式对比
+
+| 方式 | 命令 | 特点 |
+|------|------|------|
+| 快速部署 | `./quick-deploy.sh` | 一键部署，适合快速测试 |
+| Compose部署 | `./deploy.sh` | 完整配置，适合生产环境 |
+| 手动部署 | `docker build && docker run` | 自定义配置 |
+
+### 服务访问
+
+部署成功后可访问：
+- API服务: http://localhost:8002
+- API文档: http://localhost:8002/docs
+- 健康检查: http://localhost:8002/health
+- 报告列表: http://localhost:8002/reports
+
+### 管理命令
+
+```bash
+# 查看服务状态
+docker ps | grep jacoco
+
+# 查看服务日志
+docker logs jacoco-scanner-api
+
+# 停止服务
+docker stop jacoco-scanner-api
+
+# 重启服务
+docker restart jacoco-scanner-api
+```
+
+## �📊 覆盖率报告
 
 支持XML和HTML格式报告，包含指令、分支、行、方法、类和复杂度覆盖率。
 

@@ -13,8 +13,10 @@ DEFAULT_SCAN_CONFIG: Dict[str, Any] = {
     "scan_method": "jacoco",
     "project_type": "maven",
     "maven_goals": ["clean", "test", "jacoco:report"],
-    "use_docker": False,
-    "force_local_scan": True,
+    "use_docker": True,
+    "docker_image": "jacoco-scanner:latest",
+    "docker_timeout": 300,
+    "force_local_scan": False,
     "sync_mode": True,
     "scan_timeout": 1800,
 }

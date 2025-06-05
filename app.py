@@ -151,7 +151,6 @@ def github_webhook_no_auth(request: Request):
             report_data = parse_jacoco_reports(reports_dir, request_id)
             logger.info(f"[{request_id}] 报告解析结果: {report_data}")
 
-            # 如果解析报告失败但扫描成功，使用扫描结果中的覆盖率数据
             if not report_data.get('reports_available', False) and scan_result.get('status') in ['completed', 'partial']:
                 logger.info(f"[{request_id}] 使用扫描结果中的覆盖率数据")
                 report_data.update({
@@ -165,22 +164,18 @@ def github_webhook_no_auth(request: Request):
                     }
                 })
 
-            # 保存HTML报告并生成访问链接
             base_url = get_server_base_url(request)
             html_report_url = save_html_report(reports_dir, service_name, commit_id, request_id, base_url)
 
-            # 添加HTML报告链接到报告数据
             if html_report_url:
                 report_data['html_report_url'] = html_report_url
                 logger.info(f"[{request_id}] HTML报告链接: {html_report_url}")
 
-            # 发送通知 - 修改条件，即使没有coverage_summary也发送通知
             webhook_url = service_config.get('notification_webhook')
             if webhook_url:
                 try:
                     from lark_notification import send_jacoco_notification
 
-                    # 确保有coverage_data，如果没有则创建默认的
                     coverage_data = report_data.get('coverage_summary', {
                         'instruction_coverage': 0,
                         'branch_coverage': 0,
@@ -202,7 +197,7 @@ def github_webhook_no_auth(request: Request):
                         coverage_data=coverage_data,
                         scan_result=scan_result,
                         request_id=request_id,
-                        html_report_url=report_data.get('html_report_url')  # 传递HTML报告链接
+                        html_report_url=report_data.get('html_report_url')
                     )
                     logger.info(f"[{request_id}] ✅ lark通知已发送")
                 except Exception as notify_error:
@@ -230,9 +225,7 @@ def github_webhook_no_auth(request: Request):
 
             logger.info(f"[{request_id}] 同步 JaCoCo 扫描完成")
 
-            # 延迟清理临时目录，避免影响响应
             try:
-                # 不立即清理，让系统自动清理临时目录
                 logger.info(f"[{request_id}] 临时目录将由系统自动清理: {reports_dir}")
             except Exception as cleanup_error:
                 logger.warning(f"[{request_id}] 临时目录清理注意: {cleanup_error}")
@@ -245,9 +238,8 @@ def github_webhook_no_auth(request: Request):
         except Exception as sync_error:
             logger.error(f"[{request_id}] 同步扫描失败: {sync_error}")
 
-            # 返回错误但不中断服务
             return JSONResponse(
-                    status_code=200,  # 仍返回200，表示webhook接收成功
+                    status_code=200,
                     content={
                         "status": "error",
                         "request_id": request_id,
@@ -271,7 +263,6 @@ def github_webhook_no_auth(request: Request):
 
 @app.get("/reports")
 async def list_reports(request: Request):
-    """列出所有可用的HTML报告"""
     try:
         reports = []
         base_url = get_server_base_url(request)
@@ -285,7 +276,6 @@ async def list_reports(request: Request):
                         commit_path = os.path.join(project_dir, commit_dir)
                         index_file = os.path.join(commit_path, "index.html")
                         if os.path.isdir(commit_path) and os.path.exists(index_file):
-                            # 获取文件修改时间
                             mtime = os.path.getmtime(index_file)
                             relative_url = f"/reports/{project_name}/{commit_dir}/index.html"
                             project_reports.append({
@@ -296,7 +286,6 @@ async def list_reports(request: Request):
                             })
 
                     if project_reports:
-                        # 按时间排序，最新的在前
                         project_reports.sort(key=lambda x: x['created_time'], reverse=True)
                         reports.append({
                             "project_name": project_name,
@@ -319,17 +308,13 @@ async def list_reports(request: Request):
 
 @app.get("/config/test")
 async def test_config():
-    """测试配置功能"""
     test_url = "https://github.com/user/test-project.git"
     config = get_service_config(test_url)
-
     return {
         "test_url": test_url,
         "generated_config": config,
         "message": "通用配置功能正常"
     }
-
-# 异常处理
 @app.exception_handler(HTTPException)
 async def http_exception_handler(_: Request, exc: HTTPException):
     return JSONResponse(
@@ -346,19 +331,16 @@ async def generic_exception_handler(_: Request, exc: Exception):
     )
 
 def start_server():
-    """启动服务器"""
     import uvicorn
     import signal
     import sys
 
-    # 使用固定端口8002避免冲突
     port = 8002
 
     logger.info("🚀 Starting Universal JaCoCo Scanner API...")
     logger.info(f"📡 Server will be available at: http://localhost:{port}")
     logger.info(f"📖 API documentation: http://localhost:{port}/docs")
 
-    # 设置信号处理器
     def signal_handler(signum, _):
         logger.info(f"收到信号 {signum}，正在优雅关闭服务...")
         sys.exit(0)
@@ -371,15 +353,15 @@ def start_server():
             "app:app",
             host="0.0.0.0",
             port=port,
-            reload=False,  # 禁用reload避免异步问题
+            reload=False,
             log_level="info",
             access_log=True,
-            loop="asyncio"  # 明确指定事件循环
+            loop="asyncio"
         )
     except KeyboardInterrupt:
         logger.info("🛑 服务被用户中断")
     except OSError as e:
-        if "10048" in str(e):  # 端口被占用
+        if "10048" in str(e):
             logger.error(f"❌ 端口 {port} 被占用")
             logger.info("💡 请尝试以下解决方案:")
             logger.info(f"   1. 使用命令: python -m uvicorn app:app --host 0.0.0.0 --port 8003")

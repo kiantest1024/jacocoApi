@@ -6,6 +6,7 @@
 
 - 支持任何Maven项目，无需修改项目配置
 - 同时支持GitHub和GitLab webhook
+- 优先使用Docker扫描，自动回退到本地扫描
 - 自动生成HTML/XML覆盖率报告
 - 自动发送Lark通知
 
@@ -35,7 +36,13 @@ python app.py
 - Content type: `application/json`
 - Events: Push events
 
-### 4. 测试功能
+### 4. 构建Docker镜像（可选）
+```bash
+chmod +x build_docker.sh
+./build_docker.sh
+```
+
+### 5. 测试功能
 ```bash
 python test_simple.py
 ```
@@ -78,6 +85,9 @@ jacocoApi/
 ├── jacoco_tasks.py     # 扫描任务处理
 ├── lark_notification.py    # Lark通知发送
 ├── test_simple.py      # 简单测试脚本
+├── Dockerfile          # Docker镜像构建文件
+├── docker_scan.sh      # Docker扫描脚本
+├── build_docker.sh     # Docker构建脚本
 ├── requirements.txt    # Python依赖
 └── README.md          # 项目文档
 ```

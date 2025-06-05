@@ -1,12 +1,13 @@
-# Universal JaCoCo Scanner API
+# JaCoCo Scanner API
 
-通用JaCoCo代码覆盖率扫描服务，支持GitHub和GitLab webhook触发。
+JaCoCo代码覆盖率扫描服务，支持GitHub和GitLab webhook触发。
 
 ## 🚀 主要特性
 
-- 支持任何Maven项目，无需修改项目配置
-- 同时支持GitHub和GitLab webhook
-- 自动生成HTML/XML覆盖率报告
+- 支持Maven项目自动扫描
+- 支持GitHub和GitLab webhook
+- Docker扫描优先，本地扫描回退
+- 自动生成HTML/XML报告
 - 自动发送Lark通知
 
 ## 📋 工作流程
@@ -35,7 +36,13 @@ python app.py
 - Content type: `application/json`
 - Events: Push events
 
-### 4. 测试功能
+### 4. 构建Docker镜像（可选）
+```bash
+chmod +x build_docker.sh
+./build_docker.sh
+```
+
+### 5. 测试功能
 ```bash
 python test_simple.py
 ```
@@ -54,32 +61,22 @@ python test_simple.py
 
 ## ⚙️ 配置说明
 
-### 全局Lark通知配置
-在 `config.py` 中统一配置Lark机器人：
-
-```python
-LARK_CONFIG = {
-    "webhook_url": "https://open.larksuite.com/open-apis/bot/v2/hook/your-webhook-id",
-    "enable_notifications": True,
-    "timeout": 10,
-    "retry_count": 3,
-    "retry_delay": 1,
-}
-```
-
-所有项目将使用此全局配置发送通知，确保通知的一致性。
+在 `config.py` 中配置Lark通知URL。
 
 ## 🔧 项目结构
 
 ```
 jacocoApi/
-├── app.py              # 主应用文件
+├── app.py              # 主应用
 ├── config.py           # 配置管理
-├── jacoco_tasks.py     # 扫描任务处理
-├── lark_notification.py    # Lark通知发送
-├── test_simple.py      # 简单测试脚本
-├── requirements.txt    # Python依赖
-└── README.md          # 项目文档
+├── jacoco_tasks.py     # 扫描任务
+├── lark_notification.py # Lark通知
+├── test_simple.py      # 测试脚本
+├── Dockerfile          # Docker镜像
+├── docker_scan.sh      # Docker扫描
+├── build_docker.sh     # Docker构建
+├── requirements.txt    # 依赖文件
+└── README.md          # 文档
 ```
 
 ## 📊 覆盖率报告

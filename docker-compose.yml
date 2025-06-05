@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.service
+      args:
+        - BUILDKIT_INLINE_CACHE=1
     container_name: jacoco-scanner-api
     ports:
       - "8002:8002"

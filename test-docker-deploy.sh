@@ -14,7 +14,9 @@ echo "✅ Docker已安装"
 # 测试构建服务镜像
 echo "🔨 测试构建API服务镜像..."
 if docker build -f Dockerfile.service -t jacoco-scanner-api:test .; then
-    echo "✅ API服务镜像构建成功"
+    echo "✅ Debian基础API服务镜像构建成功"
+elif docker build -f Dockerfile.ubuntu -t jacoco-scanner-api:test .; then
+    echo "✅ Ubuntu基础API服务镜像构建成功"
 else
     echo "❌ API服务镜像构建失败"
     exit 1

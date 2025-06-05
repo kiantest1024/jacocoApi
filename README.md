@@ -147,6 +147,15 @@ docker stop jacoco-scanner-api
 docker restart jacoco-scanner-api
 ```
 
+### 故障排除
+
+如果遇到部署问题：
+
+1. **Java包安装失败**: 脚本会自动尝试Ubuntu基础镜像
+2. **端口占用**: 检查并停止现有容器
+3. **权限问题**: 确保用户在docker组中
+4. **详细指南**: 查看 [DOCKER_TROUBLESHOOTING.md](DOCKER_TROUBLESHOOTING.md)
+
 ## �📊 覆盖率报告
 
 支持XML和HTML格式报告，包含指令、分支、行、方法、类和复杂度覆盖率。

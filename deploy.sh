@@ -39,9 +39,11 @@ docker rmi $IMAGE_NAME:latest 2>/dev/null || true
 # 构建新镜像
 echo "🔨 构建Docker镜像..."
 if docker build -f Dockerfile.service -t $IMAGE_NAME:latest .; then
-    echo "✅ 镜像构建成功"
+    echo "✅ 使用Debian基础镜像构建成功"
+elif docker build -f Dockerfile.ubuntu -t $IMAGE_NAME:latest .; then
+    echo "✅ 使用Ubuntu基础镜像构建成功"
 else
-    echo "❌ 镜像构建失败"
+    echo "❌ 镜像构建失败，请检查Docker环境"
     exit 1
 fi
 

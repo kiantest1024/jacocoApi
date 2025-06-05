@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM ubuntu:22.04
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1
@@ -8,19 +8,25 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # 安装系统依赖
 RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
     git \
-    default-jdk \
+    openjdk-11-jdk \
     maven \
     curl \
     wget \
-    procps \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && rm -rf /var/lib/apt/lists/*
 
-# 验证Java安装并设置环境变量
-RUN java -version && mvn -version
-ENV JAVA_HOME=/usr/lib/jvm/default-java
+# 设置Python别名
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
+# 设置Java环境变量
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ENV PATH="$JAVA_HOME/bin:$PATH"
+
+# 验证安装
+RUN python --version && java -version && mvn -version
 
 # 设置Maven配置
 ENV MAVEN_OPTS="-Xmx1024m"
@@ -33,7 +39,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # 安装Python依赖
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # 复制应用代码
 COPY app.py .

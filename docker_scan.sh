@@ -82,7 +82,7 @@ else
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.7</version>
+                <version>0.8.8</version>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
@@ -98,6 +98,9 @@ else
                         </goals>
                     </execution>
                 </executions>
+                <configuration>
+                    <outputDirectory>${project.reporting.outputDirectory}/jacoco</outputDirectory>
+                </configuration>
             </plugin>
 EOF
 
@@ -127,35 +130,86 @@ fi
 
 # 运行Maven测试和JaCoCo
 echo "Running Maven test with JaCoCo..."
-mvn clean test jacoco:report \
+
+# 首先编译项目
+echo "Compiling project..."
+mvn clean compile \
     -Dmaven.test.failure.ignore=true \
     -Dproject.build.sourceEncoding=UTF-8 \
     -Dmaven.compiler.source=11 \
     -Dmaven.compiler.target=11 \
-    --batch-mode \
-    || echo "Maven execution completed with warnings"
+    --batch-mode
+
+# 运行测试
+echo "Running tests..."
+mvn test \
+    -Dmaven.test.failure.ignore=true \
+    -Dproject.build.sourceEncoding=UTF-8 \
+    --batch-mode
+
+# 生成JaCoCo报告
+echo "Generating JaCoCo report..."
+mvn jacoco:report \
+    -Dmaven.test.failure.ignore=true \
+    --batch-mode
+
+echo "Maven execution completed"
 
 # 查找并复制报告
 REPORTS_DIR="/app/reports"
 mkdir -p "$REPORTS_DIR"
 
-# 查找JaCoCo报告
+# 显示target目录结构用于调试
+echo "Checking target directory structure..."
+if [ -d "target" ]; then
+    find target -type f -name "*.xml" -o -name "*.exec" | head -10
+    echo "Target directory size: $(du -sh target 2>/dev/null || echo 'unknown')"
+else
+    echo "Warning: target directory not found"
+fi
+
+# 查找JaCoCo报告文件
+echo "Looking for JaCoCo reports..."
 JACOCO_XML=$(find target -name "jacoco.xml" -type f | head -1)
+JACOCO_EXEC=$(find target -name "jacoco.exec" -type f | head -1)
 JACOCO_HTML_DIR=$(find target -name "jacoco" -type d | head -1)
+
+echo "Found files:"
+echo "  jacoco.xml: $JACOCO_XML"
+echo "  jacoco.exec: $JACOCO_EXEC"
+echo "  jacoco HTML dir: $JACOCO_HTML_DIR"
 
 if [[ -n "$JACOCO_XML" ]]; then
     echo "Found JaCoCo XML report: $JACOCO_XML"
     cp "$JACOCO_XML" "$REPORTS_DIR/jacoco.xml"
-    
+
+    # 显示XML文件内容的前几行用于调试
+    echo "XML report preview:"
+    head -10 "$JACOCO_XML"
+
     if [[ -n "$JACOCO_HTML_DIR" && -d "$JACOCO_HTML_DIR" ]]; then
         echo "Found JaCoCo HTML report: $JACOCO_HTML_DIR"
         cp -r "$JACOCO_HTML_DIR" "$REPORTS_DIR/html"
     fi
-    
+
     echo "JaCoCo scan completed successfully"
+elif [[ -n "$JACOCO_EXEC" ]]; then
+    echo "Found jacoco.exec but no XML report, trying to generate report manually..."
+    mvn jacoco:report --batch-mode || echo "Manual report generation failed"
+
+    # 重新查找XML报告
+    JACOCO_XML=$(find target -name "jacoco.xml" -type f | head -1)
+    if [[ -n "$JACOCO_XML" ]]; then
+        echo "Successfully generated XML report: $JACOCO_XML"
+        cp "$JACOCO_XML" "$REPORTS_DIR/jacoco.xml"
+        head -10 "$JACOCO_XML"
+    else
+        echo "Failed to generate XML report, creating empty report"
+        echo '<?xml version="1.0" encoding="UTF-8"?><report name="empty"><counter type="INSTRUCTION" missed="0" covered="0"/></report>' > "$REPORTS_DIR/jacoco.xml"
+    fi
 else
-    echo "Warning: No JaCoCo reports found"
-    # 创建空报告
+    echo "Warning: No JaCoCo reports or exec files found"
+    echo "Creating empty report"
     echo '<?xml version="1.0" encoding="UTF-8"?><report name="empty"><counter type="INSTRUCTION" missed="0" covered="0"/></report>' > "$REPORTS_DIR/jacoco.xml"
 fi
 

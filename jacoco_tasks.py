@@ -25,25 +25,8 @@ def run_jacoco_scan_docker(
     if service_config.get('force_local_scan', False):
         logger.info(f"[{request_id}] 强制使用本地扫描")
         scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
-    elif service_config.get('use_docker', True) and not service_config.get('force_local_scan', False):
-        # 优先尝试Docker扫描（除非强制本地扫描）
-        logger.info(f"[{request_id}] 优先使用Docker扫描")
-
-        # 检查Docker是否可用
-        if _check_docker_available(request_id):
-            try:
-                logger.info(f"[{request_id}] 使用Docker扫描")
-                scan_result = _run_docker_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
-
-                logger.info(f"[{request_id}] ✅ Docker扫描成功完成")
-            except Exception as docker_error:
-                logger.warning(f"[{request_id}] Docker扫描失败，回退到本地扫描: {str(docker_error)}")
-                scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
-        else:
-            logger.warning(f"[{request_id}] Docker不可用，使用本地扫描")
-            scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
     else:
-        logger.info(f"[{request_id}] 配置为使用本地扫描")
+        logger.info(f"[{request_id}] 使用本地扫描")
         scan_result = _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
 
     # 通知发送由调用方(app.py)统一处理
@@ -51,193 +34,11 @@ def run_jacoco_scan_docker(
 
     return scan_result
 
-def _check_docker_available(request_id: str) -> bool:
-    """
-    检查Docker是否可用
-    """
-    try:
-        # 检查Docker命令是否存在
-        result = subprocess.run(
-            ['docker', '--version'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-
-        if result.returncode != 0:
-            logger.warning(f"[{request_id}] Docker命令不可用: {result.stderr}")
-            return False
-
-        # 检查Docker守护进程是否运行
-        result = subprocess.run(
-            ['docker', 'info'],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-
-        if result.returncode != 0:
-            logger.warning(f"[{request_id}] Docker守护进程未运行: {result.stderr}")
-            return False
-
-        # 检查Docker镜像是否存在
-        docker_image = 'jacoco-scanner:latest'
-        result = subprocess.run(
-            ['docker', 'images', '-q', docker_image],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-
-        if result.returncode != 0 or not result.stdout.strip():
-            logger.warning(f"[{request_id}] Docker镜像 {docker_image} 不存在")
-            logger.info(f"[{request_id}] 请先构建Docker镜像: docker build -t {docker_image} -f docker/Dockerfile .")
-            return False
-
-        logger.info(f"[{request_id}] ✅ Docker环境检查通过")
-        return True
-
-    except subprocess.TimeoutExpired:
-        logger.warning(f"[{request_id}] Docker检查超时")
-        return False
-    except FileNotFoundError:
-        logger.warning(f"[{request_id}] Docker命令未找到")
-        return False
-    except Exception as e:
-        logger.warning(f"[{request_id}] Docker检查失败: {str(e)}")
-        return False
 
 
 
-def _run_docker_scan(
-    repo_url: str,
-    commit_id: str,
-    branch_name: str,
-    reports_dir: str,
-    service_config: Dict[str, Any],
-    request_id: str
-) -> Dict[str, Any]:
 
-    logger.info(f"[{request_id}] Starting Docker JaCoCo scan")
-    logger.info(f"[{request_id}] Repository: {repo_url}")
-    logger.info(f"[{request_id}] Commit: {commit_id}")
-    logger.info(f"[{request_id}] Branch: {branch_name}")
 
-    docker_image = service_config.get('docker_image', 'jacoco-scanner:latest')
-    logger.info(f"[{request_id}] Using Docker image: {docker_image}")
-
-    os.makedirs(reports_dir, exist_ok=True)
-    abs_reports_dir = os.path.abspath(reports_dir)
-
-    repos_base_dir = "./repos"
-    os.makedirs(repos_base_dir, exist_ok=True)
-    abs_repos_dir = os.path.abspath(repos_base_dir)
-
-    service_name = service_config.get('service_name', 'project')
-    docker_cmd = [
-        'docker', 'run', '--rm',
-        '-v', f'{abs_reports_dir}:/app/reports',
-        '-v', f'{abs_repos_dir}:/app/repos',
-        docker_image,
-        '/app/scripts/scan.sh',
-        '--repo-url', repo_url,
-        '--commit-id', commit_id,
-        '--branch', branch_name,
-        '--service-name', service_name
-    ]
-
-    try:
-        logger.info(f"[{request_id}] Executing Docker command: {' '.join(docker_cmd)}")
-        
-        # 使用更短的超时时间，避免长时间卡住
-        timeout_seconds = 300  # 5分钟超时
-        logger.info(f"[{request_id}] Docker扫描超时设置: {timeout_seconds}秒")
-
-        try:
-            result = subprocess.run(
-                docker_cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds
-            )
-        except subprocess.TimeoutExpired:
-            logger.error(f"[{request_id}] Docker扫描超时（{timeout_seconds}秒），强制终止")
-            # 尝试清理可能的僵尸容器
-            try:
-                cleanup_cmd = ["docker", "ps", "-q", "--filter", "ancestor=jacoco-scanner:latest"]
-                cleanup_result = subprocess.run(cleanup_cmd, capture_output=True, text=True, timeout=10)
-                if cleanup_result.stdout.strip():
-                    container_ids = cleanup_result.stdout.strip().split('\n')
-                    for container_id in container_ids:
-                        subprocess.run(["docker", "kill", container_id], capture_output=True, timeout=5)
-                        logger.info(f"[{request_id}] 已终止容器: {container_id}")
-            except Exception as cleanup_error:
-                logger.warning(f"[{request_id}] 清理容器失败: {cleanup_error}")
-
-            # 回退到本地扫描
-            logger.info(f"[{request_id}] Docker超时，回退到本地扫描")
-            return _run_local_scan(repo_url, commit_id, branch_name, reports_dir, service_config, request_id)
-
-        if result.returncode == 0:
-            logger.info(f"[{request_id}] Docker scan completed successfully")
-            
-            report_files = []
-            if os.path.exists(abs_reports_dir):
-                for root, _, files in os.walk(abs_reports_dir):
-                    for file in files:
-                        if file.endswith(('.xml', '.html', '.json')):
-                            report_files.append(os.path.join(root, file))
-
-            if report_files:
-                try:
-                    parsed_reports = parse_jacoco_reports(abs_reports_dir, request_id)
-                    return {
-                        "status": "success",
-                        "docker_output": result.stdout,
-                        "report_files": report_files,
-                        **parsed_reports
-                    }
-                except Exception as e:
-                    logger.error(f"[{request_id}] Failed to parse reports: {str(e)}")
-                    return {
-                        "status": "partial_success",
-                        "docker_output": result.stdout,
-                        "report_files": report_files,
-                        "parse_error": str(e)
-                    }
-            else:
-                logger.warning(f"[{request_id}] No report files generated")
-                return {
-                    "status": "no_reports",
-                    "docker_output": result.stdout,
-                    "message": "Docker scan completed but no reports were generated"
-                }
-        else:
-            logger.error(f"[{request_id}] Docker scan failed with return code {result.returncode}")
-            logger.error(f"[{request_id}] Docker stdout: {result.stdout}")
-            logger.error(f"[{request_id}] Docker stderr: {result.stderr}")
-
-            # 分析具体错误
-            error_details = []
-            if result.stdout:
-                if "Non-resolvable parent POM" in result.stdout:
-                    error_details.append("父POM解析失败")
-                if "Could not find artifact" in result.stdout:
-                    error_details.append("依赖下载失败")
-                if "MaxPermSize" in result.stdout:
-                    error_details.append("Java参数配置问题")
-                if "No such file or directory" in result.stdout:
-                    error_details.append("文件路径问题")
-
-            error_summary = ", ".join(error_details) if error_details else "未知错误"
-            raise Exception(f"Docker scan failed with return code {result.returncode}: {error_summary}. Details: {result.stderr or result.stdout}")
-
-    except subprocess.TimeoutExpired:
-        logger.error(f"[{request_id}] Docker scan timed out")
-        raise Exception("Docker scan timed out")
-    except Exception as e:
-        logger.error(f"[{request_id}] Docker scan failed: {str(e)}")
-        raise Exception(f"Docker scan failed: {str(e)}")
 
 def parse_jacoco_reports(reports_dir: str, request_id: str) -> Dict[str, Any]:
     logger.info(f"[{request_id}] Parsing JaCoCo reports: {reports_dir}")
@@ -376,16 +177,12 @@ def parse_jacoco_xml_file(xml_path: str, request_id: str) -> Dict[str, Any]:
 def _run_local_scan(
     repo_url: str,
     commit_id: str,
-    _: str,  # branch_name - 保留以保持接口一致性
+    _: str,  # branch_name
     reports_dir: str,
-    __: Dict[str, Any],  # service_config - 保留以保持接口一致性
+    __: Dict[str, Any],  # service_config
     request_id: str
 ) -> Dict[str, Any]:
-    """
-    本地JaCoCo扫描（不使用Docker）
-    """
     logger.info(f"[{request_id}] 开始本地JaCoCo扫描")
-
     import tempfile
     import shutil
 

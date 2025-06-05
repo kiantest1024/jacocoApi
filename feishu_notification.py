@@ -8,50 +8,19 @@ logger = logging.getLogger(__name__)
 
 
 class FeishuNotifier:
-    """lark机器人通知器。"""
-    
     def __init__(self, webhook_url: str):
-        """
-        初始化lark通知器。
-        
-        参数:
-            webhook_url: lark机器人 webhook URL
-        """
         self.webhook_url = webhook_url
         
     def send_jacoco_report(
-        self,
-        repo_url: str,
-        branch_name: str,
-        commit_id: str,
-        coverage_data: Dict[str, Any],
-        scan_result: Dict[str, Any],
-        request_id: str,
-        html_report_url: str = None
+        self, repo_url: str, branch_name: str, commit_id: str,
+        coverage_data: Dict[str, Any], scan_result: Dict[str, Any],
+        request_id: str, html_report_url: str = None
     ) -> bool:
-        """
-        发送 JaCoCo 覆盖率报告到lark。
-        
-        参数:
-            repo_url: 仓库 URL
-            branch_name: 分支名称
-            commit_id: 提交 ID
-            coverage_data: 覆盖率数据
-            scan_result: 扫描结果
-            request_id: 请求 ID
-            
-        返回:
-            是否发送成功
-        """
         try:
-            # 构建消息内容
             message = self._build_jacoco_message(
                 repo_url, branch_name, commit_id, coverage_data, scan_result, request_id, html_report_url
             )
-            
-            # 发送消息
             return self._send_message(message)
-            
         except Exception as e:
             logger.error(f"[{request_id}] 发送lark通知失败: {str(e)}")
             return False

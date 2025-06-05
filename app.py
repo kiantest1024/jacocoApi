@@ -15,58 +15,33 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 # 日志配置
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # FastAPI应用
-app = FastAPI(
-    title="Universal JaCoCo Scanner API",
-    description="通用JaCoCo代码覆盖率扫描服务，支持GitHub和GitLab webhook",
-    version="2.0.0"
-)
+app = FastAPI(title="Universal JaCoCo Scanner API", version="2.0.0")
 
 # CORS中间件
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# 创建报告存储目录
 REPORTS_BASE_DIR = "./reports"
 os.makedirs(REPORTS_BASE_DIR, exist_ok=True)
-
-# 挂载静态文件服务（用于HTML报告）
 app.mount("/reports", StaticFiles(directory=REPORTS_BASE_DIR), name="reports")
 
 def get_project_name_from_url(repo_url: str) -> str:
-    """从仓库URL提取项目名称"""
     url = repo_url.replace('.git', '')
-    if '/' in url:
-        return url.split('/')[-1]
-    return url
+    return url.split('/')[-1] if '/' in url else url
 
 def get_service_config(repo_url: str) -> Dict[str, Any]:
-    """获取服务配置"""
-    # 使用config.py中的配置函数
     from config import get_service_config as config_get_service_config
     return config_get_service_config(repo_url)
 
 def get_server_base_url(request: Request = None) -> str:
-    """获取服务器基础URL"""
     if request:
-        # 从请求中获取实际的host
         host = request.headers.get("host", "localhost:8002")
         scheme = "https" if request.headers.get("x-forwarded-proto") == "https" else "http"
         return f"{scheme}://{host}"
-    else:
-        # 默认值
-        return "http://localhost:8002"
+    return "http://localhost:8002"
 
 def save_html_report(reports_dir: str, project_name: str, commit_id: str, request_id: str, base_url: str = None) -> str:
     """保存HTML报告并返回访问链接"""

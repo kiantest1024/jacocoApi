@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""
-Docker问题自动修复脚本
-"""
 
 import subprocess
-import os
 import sys
 
 def run_command(cmd, timeout=30):
-    """运行命令并返回结果"""
     try:
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
         return result.returncode, result.stdout, result.stderr
@@ -18,24 +13,20 @@ def run_command(cmd, timeout=30):
         return -1, "", str(e)
 
 def check_docker():
-    """检查Docker状态"""
     print("🔍 检查Docker状态...")
-    
-    # 检查Docker命令
+
     code, out, err = run_command("docker --version")
     if code != 0:
         print("❌ Docker命令不可用")
         return False
-    
+
     print(f"✅ Docker版本: {out.strip()}")
-    
-    # 检查Docker守护进程
+
     code, out, err = run_command("docker info")
     if code != 0:
         print("❌ Docker守护进程未运行")
-        print(f"错误: {err}")
         return False
-    
+
     print("✅ Docker守护进程运行正常")
     return True
 
@@ -52,13 +43,13 @@ def check_image():
     
     # 测试镜像是否能正常启动
     print("🧪 测试镜像启动...")
-    code, out, err = run_command("docker run --rm jacoco-scanner:latest --help", timeout=60)
-    
-    if code != 0:
+    code, out, err = run_command("docker run --rm jacoco-scanner:latest", timeout=30)
+
+    if code != 0 and "Usage:" not in out:
         print("❌ Docker镜像启动失败")
         print(f"错误输出: {err}")
         return False
-    
+
     print("✅ Docker镜像测试通过")
     return True
 

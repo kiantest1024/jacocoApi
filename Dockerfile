@@ -14,9 +14,10 @@ WORKDIR /app
 # 创建必要目录
 RUN mkdir -p /app/repos /app/reports /app/scripts
 
-# 复制扫描脚本
+# 复制脚本
 COPY docker_scan.sh /app/scripts/docker_scan.sh
-RUN chmod +x /app/scripts/docker_scan.sh
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/scripts/docker_scan.sh /app/entrypoint.sh
 
 # 设置Maven配置优化
 ENV MAVEN_OPTS="-Xmx1024m"
@@ -25,5 +26,5 @@ ENV MAVEN_CONFIG="/root/.m2"
 # 预下载常用Maven依赖以加速后续构建
 RUN mvn help:evaluate -Dexpression=maven.version -q -DforceStdout || true
 
-# 设置入口点
-ENTRYPOINT ["/app/scripts/docker_scan.sh"]
+# 设置入口点 - 使用bash执行包装脚本
+ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]

@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Universal JaCoCo Scanner API", version="2.0.0")
+app = FastAPI(title="JaCoCo Scanner API", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 REPORTS_BASE_DIR = "./reports"
@@ -73,8 +73,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "2.0.0",
-        "timestamp": time.time(),
-        "service": "Universal JaCoCo Scanner"
+        "service": "JaCoCo Scanner"
     }
 
 @app.post("/github/webhook-no-auth")
@@ -306,15 +305,7 @@ async def list_reports(request: Request):
             content={"status": "error", "message": f"获取报告列表失败: {str(e)}"}
         )
 
-@app.get("/config/test")
-async def test_config():
-    test_url = "https://github.com/user/test-project.git"
-    config = get_service_config(test_url)
-    return {
-        "test_url": test_url,
-        "generated_config": config,
-        "message": "通用配置功能正常"
-    }
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(_: Request, exc: HTTPException):
     return JSONResponse(
@@ -337,9 +328,9 @@ def start_server():
 
     port = 8002
 
-    logger.info("🚀 Starting Universal JaCoCo Scanner API...")
-    logger.info(f"📡 Server will be available at: http://localhost:{port}")
-    logger.info(f"📖 API documentation: http://localhost:{port}/docs")
+    logger.info("🚀 Starting JaCoCo Scanner API...")
+    logger.info(f"📡 Server: http://localhost:{port}")
+    logger.info(f"📖 Docs: http://localhost:{port}/docs")
 
     def signal_handler(signum, _):
         logger.info(f"收到信号 {signum}，正在优雅关闭服务...")

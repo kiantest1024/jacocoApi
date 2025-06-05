@@ -18,11 +18,13 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py config.py jacoco_tasks.py lark_notification.py ./
+COPY app.py jacoco_tasks.py lark_notification.py docker_config_manager.py ./
+COPY config.py config_example.py ./
 COPY docker_scan.sh entrypoint.sh ./
+COPY templates/ ./templates/
 RUN chmod +x docker_scan.sh entrypoint.sh
 
-RUN mkdir -p /app/reports
+RUN mkdir -p /app/reports /app/config
 
 EXPOSE 8002
 

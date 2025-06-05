@@ -2,14 +2,24 @@ import logging
 import requests
 from typing import Dict, Any
 from datetime import datetime
-from config import LARK_CONFIG
+from config import get_lark_config, LARK_BOTS
 
 logger = logging.getLogger(__name__)
 
 
 class LarkNotifier:
-    def __init__(self, webhook_url: str = None):
-        self.webhook_url = webhook_url or LARK_CONFIG["webhook_url"]
+    def __init__(self, webhook_url: str = None, bot_id: str = "default", bot_config: Dict[str, Any] = None):
+        if bot_config:
+            self.config = bot_config
+        elif bot_id:
+            self.config = get_lark_config(bot_id)
+        else:
+            self.config = get_lark_config("default")
+
+        self.webhook_url = webhook_url or self.config["webhook_url"]
+        self.bot_name = self.config.get("name", "Lark机器人")
+        self.timeout = self.config.get("timeout", 10)
+        self.retry_count = self.config.get("retry_count", 3)
         
     def send_jacoco_report(
         self, repo_url: str, branch_name: str, commit_id: str,
@@ -202,13 +212,13 @@ class LarkNotifier:
     def _send_message(self, message: Dict[str, Any]) -> bool:
 
         # 检查是否启用通知
-        if not LARK_CONFIG.get("enable_notifications", True):
-            logger.info("Lark通知已禁用，跳过发送")
+        if not self.config.get("enable_notifications", True):
+            logger.info(f"Lark通知已禁用({self.bot_name})，跳过发送")
             return True
 
-        retry_count = LARK_CONFIG.get("retry_count", 3)
-        retry_delay = LARK_CONFIG.get("retry_delay", 1)
-        timeout = LARK_CONFIG.get("timeout", 10)
+        retry_count = self.retry_count
+        retry_delay = self.config.get("retry_delay", 1)
+        timeout = self.timeout
 
         for attempt in range(retry_count):
             try:
@@ -265,16 +275,24 @@ def send_jacoco_notification(
     scan_result: Dict[str, Any],
     request_id: str,
     html_report_url: str = None,
-    webhook_url: str = None
+    webhook_url: str = None,
+    bot_id: str = "default",
+    bot_config: Dict[str, Any] = None
 ) -> bool:
-    if not webhook_url and not LARK_CONFIG.get("webhook_url"):
-        logger.warning(f"[{request_id}] 未配置lark webhook URL，跳过通知")
+    """发送JaCoCo覆盖率报告通知"""
+    try:
+        notifier = LarkNotifier(webhook_url, bot_id, bot_config)
+        if not notifier.webhook_url:
+            logger.warning(f"[{request_id}] 未配置lark webhook URL，跳过通知")
+            return False
+
+        logger.info(f"[{request_id}] 发送通知到机器人: {notifier.bot_name}")
+        return notifier.send_jacoco_report(
+            repo_url, branch_name, commit_id, coverage_data, scan_result, request_id, html_report_url
+        )
+    except Exception as e:
+        logger.error(f"[{request_id}] 发送通知失败: {e}")
         return False
-    
-    notifier = LarkNotifier(webhook_url)
-    return notifier.send_jacoco_report(
-        repo_url, branch_name, commit_id, coverage_data, scan_result, request_id, html_report_url
-    )
 
 
 def send_error_notification(
@@ -283,13 +301,21 @@ def send_error_notification(
     commit_id: str,
     error_message: str,
     request_id: str,
-    webhook_url: str = None
+    webhook_url: str = None,
+    bot_id: str = "default",
+    bot_config: Dict[str, Any] = None
 ) -> bool:
-    if not webhook_url and not LARK_CONFIG.get("webhook_url"):
-        logger.warning(f"[{request_id}] 未配置lark webhook URL，跳过错误通知")
+    """发送错误通知"""
+    try:
+        notifier = LarkNotifier(webhook_url, bot_id, bot_config)
+        if not notifier.webhook_url:
+            logger.warning(f"[{request_id}] 未配置lark webhook URL，跳过错误通知")
+            return False
+
+        logger.info(f"[{request_id}] 发送错误通知到机器人: {notifier.bot_name}")
+        return notifier.send_error_notification(
+            repo_url, branch_name, commit_id, error_message, request_id
+        )
+    except Exception as e:
+        logger.error(f"[{request_id}] 发送错误通知失败: {e}")
         return False
-    
-    notifier = LarkNotifier(webhook_url)
-    return notifier.send_error_notification(
-        repo_url, branch_name, commit_id, error_message, request_id
-    )

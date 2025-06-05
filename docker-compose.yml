@@ -12,6 +12,7 @@ services:
       - "8002:8002"
     volumes:
       - ./reports:/app/reports
+      - ./config:/app/config  # 配置持久化
       - /var/run/docker.sock:/var/run/docker.sock  # 允许容器内使用Docker
     environment:
       - PORT=8002

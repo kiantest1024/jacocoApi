@@ -16,10 +16,14 @@ echo "🔨 构建Docker镜像..."
 docker build -f Dockerfile.service -t jacoco-scanner-api:latest .
 
 echo "🚀 启动容器..."
+# 创建配置目录
+mkdir -p $(pwd)/config
+
 docker run -d \
   --name jacoco-scanner-api \
   -p 8002:8002 \
   -v $(pwd)/reports:/app/reports \
+  -v $(pwd)/config:/app/config \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --restart unless-stopped \
   jacoco-scanner-api:latest

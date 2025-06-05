@@ -4,15 +4,36 @@ import time
 import json
 from typing import Dict, Any
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="JaCoCo Scanner API", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# 模板配置
+templates = Jinja2Templates(directory="templates")
+
+# Docker环境配置管理
+if os.path.exists("/app/config"):
+    from docker_config_manager import init_docker_config, get_docker_config_manager
+    init_docker_config()
+    logger.info("Docker配置管理已启用")
+
+# 数据模型
+class ProjectMapping(BaseModel):
+    project_name: str
+    git_url: str
+    bot_id: str
+    webhook_url: str = None
+
+class DeleteMapping(BaseModel):
+    pattern: str
 
 REPORTS_BASE_DIR = "./reports"
 os.makedirs(REPORTS_BASE_DIR, exist_ok=True)
@@ -60,8 +81,14 @@ async def root():
     return {
         "message": "JaCoCo Scanner API",
         "version": "2.0.0",
-        "docs": "/docs"
+        "docs": "/docs",
+        "config": "/config"
     }
+
+@app.get("/config", response_class=HTMLResponse)
+async def config_page(request: Request):
+    """配置管理页面"""
+    return templates.TemplateResponse("config.html", {"request": request})
 
 @app.get("/health")
 async def health_check():
@@ -165,8 +192,8 @@ def github_webhook_no_auth(request: Request):
                 report_data['html_report_url'] = html_report_url
                 logger.info(f"[{request_id}] HTML报告链接: {html_report_url}")
 
-            webhook_url = service_config.get('notification_webhook')
-            if webhook_url:
+            # 发送Lark通知
+            if service_config.get('enable_notifications', True):
                 try:
                     from lark_notification import send_jacoco_notification
 
@@ -179,21 +206,27 @@ def github_webhook_no_auth(request: Request):
                         'class_coverage': 0
                     })
 
+                    bot_id = service_config.get('bot_id', 'default')
+                    bot_name = service_config.get('bot_name', '默认机器人')
+                    webhook_url = service_config.get('notification_webhook')
+
                     logger.info(f"[{request_id}] 准备发送Lark通知...")
+                    logger.info(f"[{request_id}] 目标机器人: {bot_name} (ID: {bot_id})")
                     logger.info(f"[{request_id}] Webhook URL: {webhook_url}")
                     logger.info(f"[{request_id}] 覆盖率数据: {coverage_data}")
 
                     send_jacoco_notification(
-                        webhook_url=webhook_url,
                         repo_url=repo_url,
                         branch_name=branch_name,
                         commit_id=commit_id,
                         coverage_data=coverage_data,
                         scan_result=scan_result,
                         request_id=request_id,
-                        html_report_url=report_data.get('html_report_url')
+                        html_report_url=report_data.get('html_report_url'),
+                        webhook_url=webhook_url,
+                        bot_id=bot_id
                     )
-                    logger.info(f"[{request_id}] ✅ lark通知已发送")
+                    logger.info(f"[{request_id}] ✅ lark通知已发送到 {bot_name}")
                 except Exception as notify_error:
                     logger.error(f"[{request_id}] ❌ 发送通知失败: {notify_error}")
                     import traceback
@@ -254,6 +287,259 @@ def github_webhook_no_auth(request: Request):
     except Exception as e:
         logger.error(f"[{request_id}] Webhook processing failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Webhook processing failed: {str(e)}")
+
+@app.get("/config/bots")
+async def list_bots():
+    """列出所有配置的Lark机器人"""
+    try:
+        from config import list_all_bots
+        bots = list_all_bots()
+        return {
+            "status": "success",
+            "total_bots": len(bots),
+            "bots": bots,
+            "message": "机器人列表获取成功"
+        }
+    except Exception as e:
+        logger.error(f"获取机器人列表失败: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"获取机器人列表失败: {str(e)}"}
+        )
+
+@app.get("/config/mappings")
+async def list_mappings():
+    """列出所有项目与机器人的映射关系"""
+    try:
+        from config import list_project_mappings
+        mappings = list_project_mappings()
+        return {
+            "status": "success",
+            "total_mappings": len(mappings),
+            "mappings": mappings,
+            "message": "项目映射列表获取成功"
+        }
+    except Exception as e:
+        logger.error(f"获取项目映射失败: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"获取项目映射失败: {str(e)}"}
+        )
+
+@app.get("/config/test/{project_name}")
+async def test_project_config(project_name: str):
+    """测试指定项目的配置"""
+    try:
+        from config import get_bot_for_project, get_lark_config
+
+        # 模拟仓库URL
+        repo_url = f"http://example.com/project/{project_name}.git"
+
+        # 获取匹配的机器人
+        bot_id = get_bot_for_project(repo_url, project_name)
+        bot_config = get_lark_config(bot_id)
+
+        return {
+            "status": "success",
+            "project_name": project_name,
+            "repo_url": repo_url,
+            "matched_bot_id": bot_id,
+            "bot_config": {
+                "name": bot_config["name"],
+                "webhook_url": bot_config["webhook_url"][:50] + "..." if len(bot_config["webhook_url"]) > 50 else bot_config["webhook_url"],
+                "timeout": bot_config["timeout"],
+                "retry_count": bot_config["retry_count"]
+            },
+            "message": f"项目 {project_name} 将使用机器人: {bot_config['name']}"
+        }
+    except Exception as e:
+        logger.error(f"测试项目配置失败: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"测试项目配置失败: {str(e)}"}
+        )
+
+@app.post("/config/mapping")
+async def save_project_mapping(mapping: ProjectMapping):
+    """保存项目映射配置"""
+    try:
+        # 检查是否在Docker环境中
+        if os.path.exists("/app/config"):
+            config_manager = get_docker_config_manager()
+
+            # 如果提供了自定义webhook URL，创建自定义机器人
+            bot_id = mapping.bot_id
+            if mapping.webhook_url:
+                from config import get_lark_config
+                current_webhook = get_lark_config(mapping.bot_id).get("webhook_url", "")
+                if mapping.webhook_url != current_webhook:
+                    # 创建自定义机器人配置
+                    custom_bot_id = f"custom_{mapping.project_name}"
+                    custom_bot_config = {
+                        "webhook_url": mapping.webhook_url,
+                        "name": f"自定义机器人-{mapping.project_name}",
+                        "timeout": 10,
+                        "retry_count": 3,
+                    }
+                    config_manager.add_bot(custom_bot_id, custom_bot_config)
+                    bot_id = custom_bot_id
+
+            # 保存项目映射
+            success = config_manager.add_project_mapping(mapping.project_name, bot_id)
+
+            if success:
+                logger.info(f"项目映射已保存: {mapping.project_name} -> {bot_id}")
+                return {
+                    "status": "success",
+                    "message": f"项目 {mapping.project_name} 的配置已保存并持久化",
+                    "mapping": {
+                        "project_name": mapping.project_name,
+                        "git_url": mapping.git_url,
+                        "bot_id": bot_id,
+                        "webhook_url": mapping.webhook_url
+                    }
+                }
+            else:
+                raise Exception("配置保存失败")
+        else:
+            # 非Docker环境，使用原有逻辑
+            import importlib
+            import config
+
+            config.PROJECT_BOT_MAPPING[mapping.project_name] = mapping.bot_id
+            importlib.reload(config)
+
+            return {
+                "status": "success",
+                "message": f"项目 {mapping.project_name} 的配置已保存",
+                "mapping": {
+                    "project_name": mapping.project_name,
+                    "git_url": mapping.git_url,
+                    "bot_id": mapping.bot_id,
+                    "webhook_url": mapping.webhook_url
+                }
+            }
+    except Exception as e:
+        logger.error(f"保存项目映射失败: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"保存配置失败: {str(e)}"}
+        )
+
+@app.delete("/config/mapping")
+async def delete_project_mapping(delete_request: DeleteMapping):
+    """删除项目映射配置"""
+    try:
+        # 检查是否在Docker环境中
+        if os.path.exists("/app/config"):
+            config_manager = get_docker_config_manager()
+            success = config_manager.delete_project_mapping(delete_request.pattern)
+
+            if success:
+                logger.info(f"项目映射已删除: {delete_request.pattern}")
+                return {
+                    "status": "success",
+                    "message": f"映射 {delete_request.pattern} 已删除并持久化"
+                }
+            else:
+                return JSONResponse(
+                    status_code=404,
+                    content={"status": "error", "message": f"映射 {delete_request.pattern} 不存在"}
+                )
+        else:
+            # 非Docker环境，使用原有逻辑
+            import importlib
+            import config
+
+            if delete_request.pattern in config.PROJECT_BOT_MAPPING:
+                del config.PROJECT_BOT_MAPPING[delete_request.pattern]
+                importlib.reload(config)
+
+                return {
+                    "status": "success",
+                    "message": f"映射 {delete_request.pattern} 已删除"
+                }
+            else:
+                return JSONResponse(
+                    status_code=404,
+                    content={"status": "error", "message": f"映射 {delete_request.pattern} 不存在"}
+                )
+    except Exception as e:
+        logger.error(f"删除项目映射失败: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"删除配置失败: {str(e)}"}
+        )
+
+@app.get("/config/status")
+async def get_config_status():
+    """获取配置状态"""
+    try:
+        if os.path.exists("/app/config"):
+            config_manager = get_docker_config_manager()
+            status = config_manager.get_config_status()
+            status["environment"] = "Docker"
+            status["persistent"] = True
+        else:
+            from config import list_all_bots, list_project_mappings
+            bots = list_all_bots()
+            mappings = list_project_mappings()
+            status = {
+                "environment": "Local",
+                "persistent": False,
+                "total_bots": len(bots),
+                "total_mappings": len(mappings),
+                "config_file": "config.py",
+                "last_updated": "Runtime"
+            }
+
+        return {
+            "status": "success",
+            "config_status": status
+        }
+    except Exception as e:
+        logger.error(f"获取配置状态失败: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"获取配置状态失败: {str(e)}"}
+        )
+
+@app.post("/config/bot/test/{bot_id}")
+async def test_bot(bot_id: str):
+    """测试机器人连接"""
+    try:
+        from config import get_lark_config
+        from lark_notification import LarkNotifier
+
+        bot_config = get_lark_config(bot_id)
+        notifier = LarkNotifier(bot_config=bot_config)
+
+        # 发送测试消息
+        test_message = {
+            "msg_type": "text",
+            "content": {
+                "text": f"🧪 机器人测试消息\n机器人: {bot_config['name']}\n时间: {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            }
+        }
+
+        success = notifier._send_message(test_message)
+
+        if success:
+            return {
+                "status": "success",
+                "message": f"机器人 {bot_config['name']} 测试成功"
+            }
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"机器人 {bot_config['name']} 测试失败"}
+            )
+    except Exception as e:
+        logger.error(f"测试机器人失败: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"测试机器人失败: {str(e)}"}
+        )
 
 @app.get("/reports")
 async def list_reports(request: Request):

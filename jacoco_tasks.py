@@ -33,29 +33,39 @@ def run_jacoco_scan_docker(
 
 def _check_docker_available(request_id: str) -> bool:
     try:
+        # 快速检查Docker命令是否存在
         result = subprocess.run(['docker', '--version'], capture_output=True, text=True, timeout=5)
         if result.returncode != 0:
+            logger.info(f"[{request_id}] Docker命令不可用，将使用本地扫描")
             return False
 
+        # 检查Docker守护进程是否运行
         result = subprocess.run(['docker', 'info'], capture_output=True, text=True, timeout=5)
         if result.returncode != 0:
+            logger.info(f"[{request_id}] Docker守护进程未运行，将使用本地扫描")
             return False
 
-        # 检查或构建镜像
+        # 检查镜像是否存在
         image_name = 'jacoco-scanner:latest'
         result = subprocess.run(['docker', 'images', '-q', image_name], capture_output=True, text=True, timeout=5)
-        if not result.stdout.strip():
-            logger.info(f"[{request_id}] 构建JaCoCo Docker镜像...")
-            build_result = subprocess.run(['docker', 'build', '-t', image_name, '.'],
-                                        capture_output=True, text=True, timeout=300)
-            if build_result.returncode != 0:
-                logger.warning(f"[{request_id}] Docker镜像构建失败: {build_result.stderr}")
-                return False
 
-        logger.info(f"[{request_id}] Docker环境可用")
+        if not result.stdout.strip():
+            logger.info(f"[{request_id}] JaCoCo Docker镜像不存在")
+            logger.info(f"[{request_id}] 提示：可运行 './build_docker.sh' 构建镜像以启用Docker扫描")
+            logger.info(f"[{request_id}] 当前将使用本地扫描")
+            return False
+
+        logger.info(f"[{request_id}] Docker环境可用，将使用Docker扫描")
         return True
+
+    except subprocess.TimeoutExpired:
+        logger.info(f"[{request_id}] Docker检查超时，将使用本地扫描")
+        return False
+    except FileNotFoundError:
+        logger.info(f"[{request_id}] Docker未安装，将使用本地扫描")
+        return False
     except Exception as e:
-        logger.warning(f"[{request_id}] Docker检查失败: {str(e)}")
+        logger.info(f"[{request_id}] Docker检查失败: {str(e)}，将使用本地扫描")
         return False
 
 def _run_docker_scan(

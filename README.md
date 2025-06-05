@@ -42,7 +42,12 @@ chmod +x build_docker.sh
 ./build_docker.sh
 ```
 
-### 5. 测试功能
+### 5. 测试Docker功能
+```bash
+python test_docker.py
+```
+
+### 6. 测试基本功能
 ```bash
 python test_simple.py
 ```
@@ -85,6 +90,7 @@ jacocoApi/
 ├── jacoco_tasks.py     # 扫描任务处理
 ├── lark_notification.py    # Lark通知发送
 ├── test_simple.py      # 简单测试脚本
+├── test_docker.py      # Docker功能测试脚本
 ├── Dockerfile          # Docker镜像构建文件
 ├── docker_scan.sh      # Docker扫描脚本
 ├── build_docker.sh     # Docker构建脚本

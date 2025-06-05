@@ -59,57 +59,88 @@ if [[ ! -f "pom.xml" ]]; then
 fi
 
 # 增强pom.xml支持JaCoCo
-python3 -c "
+echo "Enhancing pom.xml for JaCoCo..."
+
+# 创建简单的pom.xml增强脚本
+cat > enhance_pom.py << 'EOF'
 import xml.etree.ElementTree as ET
 import sys
 
 try:
+    # 注册命名空间
+    ET.register_namespace('', 'http://maven.apache.org/POM/4.0.0')
+
     tree = ET.parse('pom.xml')
     root = tree.getroot()
-    
-    # 添加JaCoCo插件
-    plugins = root.find('.//{http://maven.apache.org/POM/4.0.0}plugins')
+
+    # 定义命名空间
+    ns = {'maven': 'http://maven.apache.org/POM/4.0.0'}
+
+    # 查找或创建build元素
+    build = root.find('maven:build', ns)
+    if build is None:
+        build = ET.SubElement(root, '{http://maven.apache.org/POM/4.0.0}build')
+
+    # 查找或创建plugins元素
+    plugins = build.find('maven:plugins', ns)
     if plugins is None:
-        build = root.find('.//{http://maven.apache.org/POM/4.0.0}build')
-        if build is None:
-            build = ET.SubElement(root, 'build')
-        plugins = ET.SubElement(build, 'plugins')
-    
+        plugins = ET.SubElement(build, '{http://maven.apache.org/POM/4.0.0}plugins')
+
     # 检查是否已有JaCoCo插件
     jacoco_exists = False
-    for plugin in plugins.findall('.//{http://maven.apache.org/POM/4.0.0}plugin'):
-        artifact_id = plugin.find('.//{http://maven.apache.org/POM/4.0.0}artifactId')
+    for plugin in plugins.findall('maven:plugin', ns):
+        artifact_id = plugin.find('maven:artifactId', ns)
         if artifact_id is not None and artifact_id.text == 'jacoco-maven-plugin':
             jacoco_exists = True
             break
-    
+
     if not jacoco_exists:
-        plugin = ET.SubElement(plugins, 'plugin')
-        ET.SubElement(plugin, 'groupId').text = 'org.jacoco'
-        ET.SubElement(plugin, 'artifactId').text = 'jacoco-maven-plugin'
-        ET.SubElement(plugin, 'version').text = '0.8.7'
-        
-        executions = ET.SubElement(plugin, 'executions')
-        execution = ET.SubElement(executions, 'execution')
-        ET.SubElement(execution, 'id').text = 'prepare-agent'
-        goals = ET.SubElement(execution, 'goals')
-        ET.SubElement(goals, 'goal').text = 'prepare-agent'
-        
-        execution2 = ET.SubElement(executions, 'execution')
-        ET.SubElement(execution2, 'id').text = 'report'
-        ET.SubElement(execution2, 'phase').text = 'test'
-        goals2 = ET.SubElement(execution2, 'goals')
-        ET.SubElement(goals2, 'goal').text = 'report'
-    
+        # 添加JaCoCo插件
+        plugin = ET.SubElement(plugins, '{http://maven.apache.org/POM/4.0.0}plugin')
+        ET.SubElement(plugin, '{http://maven.apache.org/POM/4.0.0}groupId').text = 'org.jacoco'
+        ET.SubElement(plugin, '{http://maven.apache.org/POM/4.0.0}artifactId').text = 'jacoco-maven-plugin'
+        ET.SubElement(plugin, '{http://maven.apache.org/POM/4.0.0}version').text = '0.8.7'
+
+        executions = ET.SubElement(plugin, '{http://maven.apache.org/POM/4.0.0}executions')
+
+        # prepare-agent execution
+        execution1 = ET.SubElement(executions, '{http://maven.apache.org/POM/4.0.0}execution')
+        ET.SubElement(execution1, '{http://maven.apache.org/POM/4.0.0}id').text = 'prepare-agent'
+        goals1 = ET.SubElement(execution1, '{http://maven.apache.org/POM/4.0.0}goals')
+        ET.SubElement(goals1, '{http://maven.apache.org/POM/4.0.0}goal').text = 'prepare-agent'
+
+        # report execution
+        execution2 = ET.SubElement(executions, '{http://maven.apache.org/POM/4.0.0}execution')
+        ET.SubElement(execution2, '{http://maven.apache.org/POM/4.0.0}id').text = 'report'
+        ET.SubElement(execution2, '{http://maven.apache.org/POM/4.0.0}phase').text = 'test'
+        goals2 = ET.SubElement(execution2, '{http://maven.apache.org/POM/4.0.0}goals')
+        ET.SubElement(goals2, '{http://maven.apache.org/POM/4.0.0}goal').text = 'report'
+
+        print('JaCoCo plugin added to pom.xml')
+    else:
+        print('JaCoCo plugin already exists in pom.xml')
+
+    # 写入文件
     tree.write('pom.xml', encoding='utf-8', xml_declaration=True)
-    print('POM enhanced successfully')
+    print('POM enhancement completed successfully')
+
 except Exception as e:
     print(f'POM enhancement failed: {e}')
-"
+    sys.exit(1)
+EOF
+
+# 运行pom.xml增强脚本
+python3 enhance_pom.py
 
 # 运行Maven测试和JaCoCo
 echo "Running Maven test with JaCoCo..."
-mvn clean test jacoco:report -Dmaven.test.failure.ignore=true -Dproject.build.sourceEncoding=UTF-8 || echo "Maven execution completed with warnings"
+mvn clean test jacoco:report \
+    -Dmaven.test.failure.ignore=true \
+    -Dproject.build.sourceEncoding=UTF-8 \
+    -Dmaven.compiler.source=11 \
+    -Dmaven.compiler.target=11 \
+    --batch-mode \
+    || echo "Maven execution completed with warnings"
 
 # 查找并复制报告
 REPORTS_DIR="/app/reports"

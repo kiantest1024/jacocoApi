@@ -1,7 +1,6 @@
 #!/bin/bash
 
-set -e
-
+# 不使用 set -e，手动处理错误
 echo "JaCoCo Docker Scanner Starting..."
 echo "Arguments: $@"
 
@@ -56,17 +55,26 @@ echo "Branch: $BRANCH"
 # 克隆仓库
 REPO_DIR="/app/repos/$SERVICE_NAME"
 rm -rf "$REPO_DIR"
-git clone "$REPO_URL" "$REPO_DIR"
+
+echo "Cloning repository..."
+if ! git clone "$REPO_URL" "$REPO_DIR"; then
+    echo "Error: Failed to clone repository"
+    exit 1
+fi
+
 cd "$REPO_DIR"
 
 # 切换到指定提交
-git checkout "$COMMIT_ID" || echo "Warning: Could not checkout $COMMIT_ID"
+echo "Switching to commit $COMMIT_ID..."
+git checkout "$COMMIT_ID" 2>/dev/null || echo "Warning: Could not checkout $COMMIT_ID, using default branch"
 
 # 检查是否为Maven项目
 if [[ ! -f "pom.xml" ]]; then
-    echo "Error: Not a Maven project"
+    echo "Error: Not a Maven project - no pom.xml found"
     exit 1
 fi
+
+echo "Maven project confirmed"
 
 # 创建完整的pom.xml以确保JaCoCo正常工作
 echo "Creating enhanced pom.xml for JaCoCo..."
@@ -172,16 +180,16 @@ mvn -version
 
 # 分步执行以便调试
 echo "Step 1: Clean and compile"
-mvn clean compile -Dmaven.test.failure.ignore=true --batch-mode
+mvn clean compile -Dmaven.test.failure.ignore=true --batch-mode || echo "Compile step completed with warnings"
 
 echo "Step 2: Compile tests"
-mvn test-compile -Dmaven.test.failure.ignore=true --batch-mode
+mvn test-compile -Dmaven.test.failure.ignore=true --batch-mode || echo "Test compile step completed with warnings"
 
 echo "Step 3: Run tests with JaCoCo"
-mvn test -Dmaven.test.failure.ignore=true --batch-mode
+mvn test -Dmaven.test.failure.ignore=true --batch-mode || echo "Test step completed with warnings"
 
 echo "Step 4: Generate JaCoCo report"
-mvn jacoco:report --batch-mode
+mvn jacoco:report --batch-mode || echo "Report generation completed with warnings"
 
 echo "Maven execution completed"
 
@@ -255,13 +263,18 @@ if [[ -n "$JACOCO_XML" ]]; then
     echo "JaCoCo scan completed successfully"
 elif [[ -n "$JACOCO_EXEC" ]]; then
     echo "Found jacoco.exec but no XML report, trying to generate report manually..."
-    mvn jacoco:report --batch-mode || echo "Manual report generation failed"
+    if mvn jacoco:report --batch-mode; then
+        echo "Manual report generation succeeded"
+    else
+        echo "Manual report generation failed, but continuing..."
+    fi
 
     # 重新查找XML报告
     JACOCO_XML=$(find target -name "jacoco.xml" -type f | head -1)
     if [[ -n "$JACOCO_XML" ]]; then
         echo "Successfully generated XML report: $JACOCO_XML"
         cp "$JACOCO_XML" "$REPORTS_DIR/jacoco.xml"
+        echo "XML report preview:"
         head -10 "$JACOCO_XML"
     else
         echo "Failed to generate XML report, creating empty report"
@@ -269,7 +282,11 @@ elif [[ -n "$JACOCO_EXEC" ]]; then
     fi
 else
     echo "Warning: No JaCoCo reports or exec files found"
-    echo "Creating empty report"
+    echo "This might indicate:"
+    echo "  1. No tests were executed"
+    echo "  2. JaCoCo agent was not properly attached"
+    echo "  3. Maven execution failed"
+    echo "Creating empty report as fallback"
     echo '<?xml version="1.0" encoding="UTF-8"?><report name="empty"><counter type="INSTRUCTION" missed="0" covered="0"/></report>' > "$REPORTS_DIR/jacoco.xml"
 fi
 

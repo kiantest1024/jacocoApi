@@ -39,7 +39,34 @@ DEFAULT_SCAN_CONFIG: Dict[str, Any] = {
 
 def get_bot_for_project(repo_url: str, project_name: str) -> str:
     """根据项目信息匹配对应的机器人ID"""
+    import os
 
+    # 检查是否使用MySQL配置
+    config_storage_type = os.getenv('CONFIG_STORAGE_TYPE', 'file')
+
+    if config_storage_type == 'mysql':
+        try:
+            from src.mysql_config_manager import get_mysql_config_manager
+            mysql_manager = get_mysql_config_manager()
+
+            # 1. 首先检查MySQL中的项目映射
+            project_mappings = mysql_manager.get_project_mappings()
+            if project_name in project_mappings:
+                return project_mappings[project_name]
+
+            # 2. 检查MySQL中的通配符匹配
+            for pattern, bot_id in project_mappings.items():
+                if '*' in pattern:
+                    regex_pattern = pattern.replace('*', '.*')
+                    if re.match(f"^{regex_pattern}$", project_name):
+                        return bot_id
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"MySQL配置查询失败，回退到文件配置: {e}")
+
+    # 文件配置系统（回退方案）
     # 1. 精确匹配项目名称
     if project_name in PROJECT_BOT_MAPPING:
         return PROJECT_BOT_MAPPING[project_name]
@@ -64,6 +91,29 @@ def get_bot_for_project(repo_url: str, project_name: str) -> str:
 
 def get_lark_config(bot_id: str) -> Dict[str, Any]:
     """获取指定机器人的配置"""
+    import os
+
+    # 检查是否使用MySQL配置
+    config_storage_type = os.getenv('CONFIG_STORAGE_TYPE', 'file')
+
+    if config_storage_type == 'mysql':
+        try:
+            from src.mysql_config_manager import get_mysql_config_manager
+            mysql_manager = get_mysql_config_manager()
+
+            # 从MySQL获取机器人配置
+            lark_bots = mysql_manager.get_lark_bots()
+            if bot_id in lark_bots:
+                return lark_bots[bot_id]
+            elif "default" in lark_bots:
+                return lark_bots["default"]
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"MySQL机器人配置查询失败，回退到文件配置: {e}")
+
+    # 文件配置系统（回退方案）
     return LARK_BOTS.get(bot_id, LARK_BOTS["default"])
 
 def get_service_config(repo_url: str) -> Dict[str, Any]:

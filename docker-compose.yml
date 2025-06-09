@@ -4,7 +4,7 @@ services:
   jacoco-api:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile
     container_name: jacoco-api
     ports:
       - "8002:8002"

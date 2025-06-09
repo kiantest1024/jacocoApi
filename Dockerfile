@@ -1,30 +1,44 @@
-FROM openjdk:11-jdk-slim
+FROM ubuntu:22.04
 
-# 安装必要工具
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV TZ=Asia/Shanghai
+
 RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
     git \
     maven \
+    openjdk-11-jdk \
     curl \
-    python3 \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-# 设置工作目录
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV PATH=$PATH:$JAVA_HOME/bin
+
+RUN useradd -m -s /bin/bash jacoco
+
 WORKDIR /app
 
-# 创建必要目录
-RUN mkdir -p /app/repos /app/reports /app/scripts
+COPY requirements.txt .
+COPY app.py .
+COPY start.py .
+COPY src/ src/
+COPY config/ config/
+COPY static/ static/
+COPY docker/ docker/
 
-# 复制脚本
-COPY docker_scan.sh /app/scripts/docker_scan.sh
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/scripts/docker_scan.sh /app/entrypoint.sh
+RUN mkdir -p reports logs && \
+    chown -R jacoco:jacoco /app
 
-# 设置Maven配置优化
-ENV MAVEN_OPTS="-Xmx1024m"
-ENV MAVEN_CONFIG="/root/.m2"
+RUN pip3 install --no-cache-dir -r requirements.txt
 
-# 预下载常用Maven依赖以加速后续构建
-RUN mvn help:evaluate -Dexpression=maven.version -q -DforceStdout || true
+USER jacoco
 
-# 设置入口点 - 使用bash执行包装脚本
-ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
+EXPOSE 8002
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8002/health || exit 1
+
+CMD ["python3", "start.py"]

@@ -4,32 +4,49 @@ services:
   jacoco-api:
     build:
       context: .
-      dockerfile: Dockerfile.service
-      args:
-        - BUILDKIT_INLINE_CACHE=1
-    container_name: jacoco-scanner-api
+      dockerfile: Dockerfile
+    container_name: jacoco-api
     ports:
       - "8002:8002"
+    environment:
+      - CONFIG_STORAGE_TYPE=mysql
+      - MYSQL_HOST=172.16.1.30
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=jacoco_config
+      - MYSQL_USER=jacoco
+      - MYSQL_PASSWORD=asd301325..
     volumes:
       - ./reports:/app/reports
-      - /var/run/docker.sock:/var/run/docker.sock  # 允许容器内使用Docker
-    environment:
-      - PORT=8002
-      - PYTHONUNBUFFERED=1
+      - ./logs:/app/logs
     restart: unless-stopped
-    networks:
-      - jacoco-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - jacoco-network
+
+  # 可选：本地MySQL服务（如果不使用外部MySQL）
+  # mysql:
+  #   image: mysql:8.0
+  #   container_name: jacoco-mysql
+  #   environment:
+  #     - MYSQL_ROOT_PASSWORD=rootpassword
+  #     - MYSQL_DATABASE=jacoco_config
+  #     - MYSQL_USER=jacoco
+  #     - MYSQL_PASSWORD=asd301325..
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #   ports:
+  #     - "3306:3306"
+  #   networks:
+  #     - jacoco-network
 
 networks:
   jacoco-network:
     driver: bridge
 
-volumes:
-  jacoco-reports:
-    driver: local
+# volumes:
+#   mysql_data:

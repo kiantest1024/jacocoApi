@@ -1,8 +1,36 @@
+# JaCoCo API 依赖包
+
+# Web框架
 fastapi==0.104.1
 uvicorn==0.23.2
+python-multipart>=0.0.6
+
+# 数据库
+mysql-connector-python>=8.2.0
+
+# 数据验证
+pydantic==2.4.2
+
+# 环境配置
 python-dotenv==1.0.0
+
+# HTTP请求
+requests==2.31.0
+
+# 模板引擎
+jinja2==3.1.2
+
+# 任务队列
 celery==5.3.4
 redis==5.0.1
-requests==2.31.0
-pydantic==2.4.2
+
+# 密码哈希
+passlib[bcrypt]>=1.7.0
+
+# Docker支持
+docker>=6.1.0
+
+# Git操作
+gitpython>=3.1.0
+python-multipart==0.0.6
 pydantic-settings==2.1.0

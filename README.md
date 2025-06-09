@@ -92,20 +92,43 @@ Web界面管理员操作密码：`password`
 
 ## 🐳 Docker部署
 
-### 构建镜像
+### 构建API服务镜像
 ```bash
-docker build -t jacoco-api .
+docker build -f Dockerfile.api -t jacoco-api:ubuntu .
 ```
 
 ### 运行容器
 ```bash
 docker run -d \
+  --name jacoco-api \
   -p 8002:8002 \
   -e CONFIG_STORAGE_TYPE=mysql \
-  -e MYSQL_HOST=your_mysql_host \
-  -e MYSQL_PASSWORD=your_password \
-  jacoco-api
+  -e MYSQL_HOST=172.16.1.30 \
+  -e MYSQL_USER=jacoco \
+  -e MYSQL_PASSWORD=asd301325.. \
+  jacoco-api:ubuntu
 ```
+
+### Docker Compose部署
+```bash
+docker-compose up -d
+```
+
+## 🐧 Ubuntu Linux部署
+
+### 快速部署脚本
+```bash
+# 直接运行（开发环境）
+./deploy-ubuntu.sh direct
+
+# 系统服务（生产环境）
+./deploy-ubuntu.sh service
+
+# Docker容器
+./deploy-ubuntu.sh docker
+```
+
+详细部署说明请参考：[Ubuntu部署指南](UBUNTU_DEPLOYMENT.md)
 
 ## 📈 使用流程
 

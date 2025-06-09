@@ -1,0 +1,58 @@
+# JaCoCo API服务 - Ubuntu Linux Docker镜像
+FROM ubuntu:22.04
+
+# 设置环境变量
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV TZ=Asia/Shanghai
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    git \
+    maven \
+    openjdk-11-jdk \
+    curl \
+    tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+# 设置Java环境
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV PATH=$PATH:$JAVA_HOME/bin
+
+# 创建应用用户
+RUN useradd -m -s /bin/bash jacoco
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制项目文件
+COPY requirements.txt .
+COPY app.py .
+COPY start.py .
+COPY src/ src/
+COPY config/ config/
+COPY static/ static/
+COPY docker/ docker/
+
+# 创建必要目录
+RUN mkdir -p reports logs && \
+    chown -R jacoco:jacoco /app
+
+# 安装Python依赖
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# 切换到应用用户
+USER jacoco
+
+# 暴露端口
+EXPOSE 8002
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8002/health || exit 1
+
+# 启动命令
+CMD ["python3", "start.py"]

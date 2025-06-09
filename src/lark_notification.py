@@ -2,7 +2,7 @@ import logging
 import requests
 from typing import Dict, Any
 from datetime import datetime
-from config import get_lark_config, LARK_BOTS
+from config.config import get_lark_config
 
 logger = logging.getLogger(__name__)
 

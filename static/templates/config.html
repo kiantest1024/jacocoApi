@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JaCoCo Scanner - 配置管理</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header h1 { color: #333; margin-bottom: 10px; }
+        .header p { color: #666; }
+        .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card h2 { color: #333; margin-bottom: 15px; border-bottom: 2px solid #007bff; padding-bottom: 5px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 500; color: #333; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .form-control:focus { outline: none; border-color: #007bff; box-shadow: 0 0 0 2px rgba(0,123,255,0.25); }
+        .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: all 0.3s; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-primary:hover { background: #0056b3; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-success:hover { background: #1e7e34; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #545b62; }
+        .table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .table th, .table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        .table th { background: #f8f9fa; font-weight: 500; }
+        .table tr:hover { background: #f8f9fa; }
+        .alert { padding: 12px; border-radius: 4px; margin-bottom: 15px; }
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-danger { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .row { display: flex; gap: 20px; }
+        .col { flex: 1; }
+        .text-center { text-align: center; }
+        .mt-3 { margin-top: 15px; }
+        .mb-3 { margin-bottom: 15px; }
+        .badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+        .badge-primary { background: #007bff; color: white; }
+        .badge-success { background: #28a745; color: white; }
+        .badge-secondary { background: #6c757d; color: white; }
+        .loading { display: none; text-align: center; padding: 20px; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 页面标题 -->
+        <div class="header">
+            <h1>🔧 JaCoCo Scanner 配置管理</h1>
+            <p>管理项目与Lark机器人的映射关系，支持实时配置和立即生效</p>
+            <div id="config-status" class="mt-3">
+                <span class="badge badge-secondary">加载中...</span>
+            </div>
+        </div>
+
+        <!-- 消息提示 -->
+        <div id="message-area"></div>
+
+        <!-- 添加新配置 -->
+        <div class="card">
+            <h2>➕ 添加项目配置</h2>
+
+            <!-- 单个项目配置 -->
+            <div id="single-project-config">
+                <h3>🔧 单个项目配置</h3>
+                <form id="add-config-form">
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <label for="git-url">Git仓库地址</label>
+                                <input type="url" id="git-url" class="form-control" placeholder="http://git.example.com/project/repo.git" required>
+                                <small style="color: #666;">支持HTTP/HTTPS Git仓库地址</small>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="form-group">
+                                <label for="project-name">项目名称</label>
+                                <input type="text" id="project-name" class="form-control" placeholder="自动从Git地址提取" readonly>
+                                <small style="color: #666;">从Git地址自动提取，可手动修改</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <label for="bot-select">选择Lark机器人</label>
+                                <select id="bot-select" class="form-control" required>
+                                    <option value="">请选择机器人...</option>
+                                    <option value="custom">🔧 自定义机器人</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="form-group">
+                                <label for="webhook-url">Webhook URL</label>
+                                <input type="url" id="webhook-url" class="form-control" placeholder="https://open.larksuite.com/open-apis/bot/v2/hook/...">
+                                <small style="color: #666;">选择机器人后自动填充，也可手动输入新的URL</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 自定义机器人配置区域 -->
+                    <div id="custom-bot-config" style="display: none;">
+                        <div class="alert alert-info">
+                            <strong>🔧 自定义机器人配置</strong><br>
+                            请输入机器人名称和Webhook URL，系统将自动创建新的机器人配置。
+                        </div>
+                        <div class="form-group">
+                            <label for="custom-bot-name">机器人名称</label>
+                            <input type="text" id="custom-bot-name" class="form-control" placeholder="例如：项目A专用机器人">
+                        </div>
+                    </div>
+
+                    <div class="text-center">
+                        <button type="button" id="extract-btn" class="btn btn-secondary">📝 提取项目名称</button>
+                        <button type="submit" class="btn btn-primary">💾 保存配置</button>
+                        <button type="button" id="test-btn" class="btn btn-success">🧪 测试配置</button>
+                    </div>
+                </form>
+            </div>
+
+            <hr class="mt-3 mb-3">
+
+            <!-- 批量项目配置 -->
+            <div id="batch-project-config">
+                <h3>📦 批量项目配置</h3>
+                <div class="form-group">
+                    <label for="batch-projects">批量Git地址（每行一个）</label>
+                    <textarea id="batch-projects" class="form-control" rows="5" placeholder="http://git.example.com/project1/repo1.git&#10;http://git.example.com/project2/repo2.git&#10;http://git.example.com/project3/repo3.git"></textarea>
+                    <small style="color: #666;">每行输入一个Git仓库地址，系统将自动提取项目名称</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="batch-bot-select">默认机器人</label>
+                    <select id="batch-bot-select" class="form-control" required>
+                        <option value="">请选择默认机器人...</option>
+                    </select>
+                    <small style="color: #666;">批量添加时使用的默认机器人</small>
+                </div>
+
+                <div class="text-center">
+                    <button type="button" id="batch-add-btn" class="btn btn-primary">📦 批量添加</button>
+                    <button type="button" id="batch-preview-btn" class="btn btn-secondary">👁️ 预览项目</button>
+                </div>
+
+                <!-- 批量预览结果 -->
+                <div id="batch-preview" style="display: none; margin-top: 15px;">
+                    <h4>📋 预览结果</h4>
+                    <div id="batch-preview-content"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 当前配置列表 -->
+        <div class="card">
+            <h2>📋 当前配置</h2>
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>加载中...</p>
+            </div>
+            <div id="config-list">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>项目名称</th>
+                            <th>Git地址</th>
+                            <th>机器人</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="config-table-body">
+                        <!-- 动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 机器人管理 -->
+        <div class="card">
+            <h2>🤖 机器人管理</h2>
+            <div id="bot-list">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>机器人ID</th>
+                            <th>名称</th>
+                            <th>类型</th>
+                            <th>Webhook URL</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bot-table-body">
+                        <!-- 动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-3">
+                <button type="button" id="add-custom-bot-btn" class="btn btn-primary">➕ 添加自定义机器人</button>
+                <button type="button" id="refresh-btn" class="btn btn-secondary">🔄 刷新数据</button>
+            </div>
+
+            <!-- 添加自定义机器人模态框 -->
+            <div id="custom-bot-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; width: 500px; max-width: 90%;">
+                    <h3>➕ 添加自定义机器人</h3>
+                    <form id="custom-bot-form">
+                        <div class="form-group">
+                            <label for="modal-bot-name">机器人名称</label>
+                            <input type="text" id="modal-bot-name" class="form-control" placeholder="例如：项目A专用机器人" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="modal-webhook-url">Webhook URL</label>
+                            <input type="url" id="modal-webhook-url" class="form-control" placeholder="https://open.larksuite.com/open-apis/bot/v2/hook/..." required>
+                        </div>
+                        <div class="text-center mt-3">
+                            <button type="submit" class="btn btn-primary">💾 保存机器人</button>
+                            <button type="button" id="cancel-custom-bot" class="btn btn-secondary">❌ 取消</button>
+                            <button type="button" id="test-custom-bot" class="btn btn-success">🧪 测试连接</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let bots = {};
+        let mappings = {};
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConfigStatus();
+            loadBots();
+            loadMappings();
+            initEventListeners();
+        });
+
+        // 初始化事件监听器
+        function initEventListeners() {
+            // Git地址输入监听
+            document.getElementById('git-url').addEventListener('input', function() {
+                const url = this.value;
+                if (url) {
+                    extractProjectName(url);
+                }
+            });
+
+            // 提取项目名称按钮
+            document.getElementById('extract-btn').addEventListener('click', function() {
+                const url = document.getElementById('git-url').value;
+                if (url) {
+                    extractProjectName(url);
+                } else {
+                    showMessage('请先输入Git地址', 'danger');
+                }
+            });
+
+            // 机器人选择监听
+            document.getElementById('bot-select').addEventListener('change', function() {
+                const botId = this.value;
+                const customBotConfig = document.getElementById('custom-bot-config');
+                const webhookUrl = document.getElementById('webhook-url');
+
+                if (botId === 'custom') {
+                    customBotConfig.style.display = 'block';
+                    webhookUrl.readOnly = false;
+                    webhookUrl.value = '';
+                    webhookUrl.placeholder = '请输入自定义机器人的Webhook URL';
+                } else {
+                    customBotConfig.style.display = 'none';
+                    webhookUrl.readOnly = true;
+                    if (botId && bots[botId]) {
+                        webhookUrl.value = bots[botId].webhook_url;
+                    } else {
+                        webhookUrl.value = '';
+                    }
+                }
+            });
+
+            // 表单提交
+            document.getElementById('add-config-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveConfig();
+            });
+
+            // 测试配置按钮
+            document.getElementById('test-btn').addEventListener('click', function() {
+                testConfig();
+            });
+
+            // 批量预览按钮
+            document.getElementById('batch-preview-btn').addEventListener('click', function() {
+                previewBatchProjects();
+            });
+
+            // 批量添加按钮
+            document.getElementById('batch-add-btn').addEventListener('click', function() {
+                batchAddProjects();
+            });
+
+            // 添加自定义机器人按钮
+            document.getElementById('add-custom-bot-btn').addEventListener('click', function() {
+                document.getElementById('custom-bot-modal').style.display = 'block';
+            });
+
+            // 取消自定义机器人
+            document.getElementById('cancel-custom-bot').addEventListener('click', function() {
+                document.getElementById('custom-bot-modal').style.display = 'none';
+                document.getElementById('custom-bot-form').reset();
+            });
+
+            // 自定义机器人表单提交
+            document.getElementById('custom-bot-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                addCustomBot();
+            });
+
+            // 测试自定义机器人连接
+            document.getElementById('test-custom-bot').addEventListener('click', function() {
+                testCustomBotConnection();
+            });
+
+            // 刷新按钮
+            document.getElementById('refresh-btn').addEventListener('click', function() {
+                loadBots();
+                loadMappings();
+            });
+        }
+
+        // 提取项目名称
+        function extractProjectName(gitUrl) {
+            try {
+                const url = new URL(gitUrl);
+                const pathParts = url.pathname.split('/');
+                let projectName = pathParts[pathParts.length - 1];
+                
+                // 移除.git后缀
+                if (projectName.endsWith('.git')) {
+                    projectName = projectName.slice(0, -4);
+                }
+                
+                document.getElementById('project-name').value = projectName;
+                document.getElementById('project-name').readOnly = false;
+                
+                showMessage(`项目名称已提取: ${projectName}`, 'success');
+            } catch (error) {
+                showMessage('Git地址格式不正确', 'danger');
+            }
+        }
+
+        // 加载配置状态
+        async function loadConfigStatus() {
+            try {
+                const response = await fetch('/config/status');
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    const status = data.config_status;
+                    const statusElement = document.getElementById('config-status');
+
+                    let statusHtml = '';
+                    if (status.environment === 'Docker') {
+                        statusHtml = `
+                            <span class="badge badge-success">🐳 Docker环境</span>
+                            <span class="badge badge-primary">💾 配置持久化</span>
+                            <span class="badge badge-secondary">🤖 ${status.total_bots} 个机器人</span>
+                            <span class="badge badge-secondary">📋 ${status.total_mappings} 个映射</span>
+                        `;
+                    } else {
+                        statusHtml = `
+                            <span class="badge badge-info">💻 本地环境</span>
+                            <span class="badge badge-secondary">🤖 ${status.total_bots} 个机器人</span>
+                            <span class="badge badge-secondary">📋 ${status.total_mappings} 个映射</span>
+                        `;
+                    }
+
+                    statusElement.innerHTML = statusHtml;
+                } else {
+                    document.getElementById('config-status').innerHTML =
+                        '<span class="badge badge-danger">❌ 状态获取失败</span>';
+                }
+            } catch (error) {
+                document.getElementById('config-status').innerHTML =
+                    '<span class="badge badge-danger">❌ 网络错误</span>';
+            }
+        }
+
+        // 加载机器人列表
+        async function loadBots() {
+            try {
+                const response = await fetch('/config/bots');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    bots = data.bots;
+                    updateBotSelect();
+                    updateBotTable();
+                } else {
+                    showMessage('加载机器人列表失败: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('网络错误: ' + error.message, 'danger');
+            }
+        }
+
+        // 加载映射配置
+        async function loadMappings() {
+            try {
+                const response = await fetch('/config/mappings');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    mappings = data.mappings;
+                    updateConfigTable();
+                } else {
+                    showMessage('加载配置失败: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('网络错误: ' + error.message, 'danger');
+            }
+        }
+
+        // 更新机器人选择框
+        function updateBotSelect() {
+            const select = document.getElementById('bot-select');
+            const batchSelect = document.getElementById('batch-bot-select');
+
+            select.innerHTML = '<option value="">请选择机器人...</option><option value="custom">🔧 自定义机器人</option>';
+            batchSelect.innerHTML = '<option value="">请选择默认机器人...</option>';
+
+            for (const [botId, botConfig] of Object.entries(bots)) {
+                const option = document.createElement('option');
+                option.value = botId;
+                option.textContent = `${botConfig.name} (${botId})`;
+                select.appendChild(option);
+
+                const batchOption = document.createElement('option');
+                batchOption.value = botId;
+                batchOption.textContent = `${botConfig.name} (${botId})`;
+                batchSelect.appendChild(batchOption);
+            }
+        }
+
+        // 更新机器人表格
+        function updateBotTable() {
+            const tbody = document.getElementById('bot-table-body');
+            tbody.innerHTML = '';
+
+            for (const [botId, botConfig] of Object.entries(bots)) {
+                const row = document.createElement('tr');
+                const isCustom = botConfig.is_custom || false;
+
+                // 创建机器人ID单元格
+                const idCell = document.createElement('td');
+                idCell.innerHTML = `<span class="badge badge-primary">${botId}</span>`;
+
+                // 创建名称单元格
+                const nameCell = document.createElement('td');
+                nameCell.textContent = botConfig.name;
+
+                // 创建类型单元格
+                const typeCell = document.createElement('td');
+                if (isCustom) {
+                    typeCell.innerHTML = '<span class="badge badge-info">自定义</span>';
+                } else {
+                    typeCell.innerHTML = '<span class="badge badge-secondary">预配置</span>';
+                }
+
+                // 创建URL单元格
+                const urlCell = document.createElement('td');
+                urlCell.innerHTML = `<code>${botConfig.webhook_url.substring(0, 50)}...</code>`;
+
+                // 创建状态单元格
+                const statusCell = document.createElement('td');
+                statusCell.innerHTML = '<span class="badge badge-success">活跃</span>';
+
+                // 创建操作单元格
+                const actionCell = document.createElement('td');
+
+                // 测试按钮
+                const testButton = document.createElement('button');
+                testButton.className = 'btn btn-secondary';
+                testButton.textContent = '🧪 测试';
+                testButton.onclick = function() {
+                    testBot(botId);
+                };
+                actionCell.appendChild(testButton);
+
+                // 删除按钮（仅自定义机器人）
+                if (isCustom) {
+                    const deleteButton = document.createElement('button');
+                    deleteButton.className = 'btn btn-danger';
+                    deleteButton.textContent = '🗑️ 删除';
+                    deleteButton.style.marginLeft = '5px';
+                    deleteButton.onclick = function() {
+                        deleteCustomBot(botId);
+                    };
+                    actionCell.appendChild(deleteButton);
+                }
+
+                // 添加所有单元格到行
+                row.appendChild(idCell);
+                row.appendChild(nameCell);
+                row.appendChild(typeCell);
+                row.appendChild(urlCell);
+                row.appendChild(statusCell);
+                row.appendChild(actionCell);
+
+                tbody.appendChild(row);
+            }
+        }
+
+        // 更新配置表格
+        function updateConfigTable() {
+            const tbody = document.getElementById('config-table-body');
+            tbody.innerHTML = '';
+
+            for (const [pattern, botId] of Object.entries(mappings)) {
+                const botName = bots[botId] ? bots[botId].name : '未知机器人';
+                const row = document.createElement('tr');
+
+                // 创建删除按钮，避免模板字符串中的特殊字符问题
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'btn btn-danger';
+                deleteButton.textContent = '🗑️ 删除';
+                deleteButton.onclick = function() {
+                    deleteMapping(pattern);
+                };
+
+                // 创建表格行内容
+                const patternCell = document.createElement('td');
+                const codeElement = document.createElement('code');
+                codeElement.textContent = pattern;
+                patternCell.appendChild(codeElement);
+
+                const gitUrlCell = document.createElement('td');
+                gitUrlCell.textContent = '-';
+
+                const botCell = document.createElement('td');
+                botCell.innerHTML = `${botName} <span class="badge badge-secondary">${botId}</span>`;
+
+                const statusCell = document.createElement('td');
+                statusCell.innerHTML = '<span class="badge badge-success">已配置</span>';
+
+                const actionCell = document.createElement('td');
+                actionCell.appendChild(deleteButton);
+
+                // 添加所有单元格到行
+                row.appendChild(patternCell);
+                row.appendChild(gitUrlCell);
+                row.appendChild(botCell);
+                row.appendChild(statusCell);
+                row.appendChild(actionCell);
+
+                tbody.appendChild(row);
+            }
+        }
+
+        // 保存配置
+        async function saveConfig() {
+            const gitUrl = document.getElementById('git-url').value;
+            const projectName = document.getElementById('project-name').value;
+            const botId = document.getElementById('bot-select').value;
+            const webhookUrl = document.getElementById('webhook-url').value;
+            const customBotName = document.getElementById('custom-bot-name').value;
+
+            if (!gitUrl || !projectName || !botId) {
+                showMessage('请填写完整信息', 'danger');
+                return;
+            }
+
+            // 检查项目是否已存在
+            try {
+                const checkResponse = await fetch('/config/projects/check', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        project_name: projectName
+                    })
+                });
+
+                const checkData = await checkResponse.json();
+                if (checkData.status === 'success' && checkData.result.exists) {
+                    const existing = checkData.result;
+                    const confirmUpdate = confirm(
+                        `项目 "${projectName}" 已经配置过！\n` +
+                        `当前机器人：${existing.bot_name}\n` +
+                        `当前URL：${existing.webhook_url}\n\n` +
+                        `是否要修改配置？（需要输入管理员密码）`
+                    );
+
+                    if (confirmUpdate) {
+                        const password = prompt('请输入管理员密码：');
+                        if (!password) {
+                            showMessage('未输入密码，操作取消', 'info');
+                            return;
+                        }
+
+                        // 执行管理员操作
+                        await adminUpdateProject(projectName, botId, password);
+                        return;
+                    } else {
+                        showMessage('操作已取消', 'info');
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('检查项目失败:', error);
+            }
+
+            // 如果是自定义机器人，先创建机器人
+            let finalBotId = botId;
+            if (botId === 'custom') {
+                if (!customBotName || !webhookUrl) {
+                    showMessage('请填写自定义机器人名称和Webhook URL', 'danger');
+                    return;
+                }
+
+                finalBotId = await createCustomBot(customBotName, webhookUrl);
+                if (!finalBotId) {
+                    return; // 创建失败，错误信息已在createCustomBot中显示
+                }
+            }
+
+            try {
+                const response = await fetch('/config/mapping', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        project_name: projectName,
+                        git_url: gitUrl,
+                        bot_id: finalBotId,
+                        webhook_url: webhookUrl
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showMessage('配置保存成功！', 'success');
+                    document.getElementById('add-config-form').reset();
+                    document.getElementById('custom-bot-config').style.display = 'none';
+                    loadMappings(); // 重新加载配置
+                    loadBots(); // 重新加载机器人列表
+                } else {
+                    showMessage('保存失败: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('网络错误: ' + error.message, 'danger');
+            }
+        }
+
+        // 测试配置
+        async function testConfig() {
+            const projectName = document.getElementById('project-name').value;
+            
+            if (!projectName) {
+                showMessage('请先输入项目名称', 'danger');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/config/test/${projectName}`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    showMessage(`测试成功！项目 ${projectName} 将使用机器人: ${data.bot_config.name}`, 'success');
+                } else {
+                    showMessage('测试失败: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('网络错误: ' + error.message, 'danger');
+            }
+        }
+
+        // 删除映射
+        async function deleteMapping(pattern) {
+            if (!confirm(`确定要删除映射 "${pattern}" 吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/config/mapping', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        pattern: pattern
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    showMessage('映射删除成功！', 'success');
+                    loadMappings(); // 重新加载配置
+                } else {
+                    showMessage('删除失败: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('网络错误: ' + error.message, 'danger');
+            }
+        }
+
+        // 测试机器人
+        async function testBot(botId) {
+            showMessage(`正在测试机器人 ${botId}...`, 'info');
+            
+            try {
+                const response = await fetch(`/config/bot/test/${botId}`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    showMessage(`机器人 ${botId} 测试成功！`, 'success');
+                } else {
+                    showMessage(`机器人 ${botId} 测试失败: ${data.message}`, 'danger');
+                }
+            } catch (error) {
+                showMessage('网络错误: ' + error.message, 'danger');
+            }
+        }
+
+        // 创建自定义机器人
+        async function createCustomBot(name, webhookUrl) {
+            try {
+                const response = await fetch('/config/bot/custom', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        webhook_url: webhookUrl
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showMessage(`自定义机器人 "${name}" 创建成功！`, 'success');
+                    return data.bot_id;
+                } else {
+                    showMessage('创建自定义机器人失败: ' + data.message, 'danger');
+                    return null;
+                }
+            } catch (error) {
+                showMessage('网络错误: ' + error.message, 'danger');
+                return null;
+            }
+        }
+
+        // 管理员更新项目配置
+        async function adminUpdateProject(projectName, botId, password) {
+            try {
+                const response = await fetch('/config/admin/action', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        password: password,
+                        action: 'update_project',
+                        data: {
+                            project_name: projectName,
+                            bot_id: botId
+                        }
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showMessage('项目配置更新成功！', 'success');
+                    document.getElementById('add-config-form').reset();
+                    loadMappings();
+                } else {
+                    showMessage('更新失败: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('网络错误: ' + error.message, 'danger');
+            }
+        }
+
+        // 预览批量项目
+        function previewBatchProjects() {
+            const batchText = document.getElementById('batch-projects').value.trim();
+            if (!batchText) {
+                showMessage('请输入Git地址', 'danger');
+                return;
+            }
+
+            const urls = batchText.split('\n').filter(url => url.trim());
+            const projects = [];
+
+            for (const url of urls) {
+                try {
+                    const urlObj = new URL(url.trim());
+                    const pathParts = urlObj.pathname.split('/');
+                    let projectName = pathParts[pathParts.length - 1];
+
+                    if (projectName.endsWith('.git')) {
+                        projectName = projectName.slice(0, -4);
+                    }
+
+                    projects.push({
+                        name: projectName,
+                        git_url: url.trim()
+                    });
+                } catch (error) {
+                    projects.push({
+                        name: '解析失败',
+                        git_url: url.trim(),
+                        error: '无效的Git地址'
+                    });
+                }
+            }
+
+            // 显示预览结果
+            const previewDiv = document.getElementById('batch-preview');
+            const contentDiv = document.getElementById('batch-preview-content');
+
+            let html = '<table class="table"><thead><tr><th>项目名称</th><th>Git地址</th><th>状态</th></tr></thead><tbody>';
+
+            for (const project of projects) {
+                const statusClass = project.error ? 'danger' : 'success';
+                const status = project.error || '✅ 准备添加';
+                html += `<tr><td>${project.name}</td><td><code>${project.git_url}</code></td><td><span class="badge badge-${statusClass}">${status}</span></td></tr>`;
+            }
+
+            html += '</tbody></table>';
+            contentDiv.innerHTML = html;
+            previewDiv.style.display = 'block';
+
+            showMessage(`预览完成：共 ${projects.length} 个项目`, 'info');
+        }
+
+        // 批量添加项目
+        async function batchAddProjects() {
+            const batchText = document.getElementById('batch-projects').value.trim();
+            const defaultBotId = document.getElementById('batch-bot-select').value;
+
+            if (!batchText) {
+                showMessage('请输入Git地址', 'danger');
+                return;
+            }
+
+            if (!defaultBotId) {
+                showMessage('请选择默认机器人', 'danger');
+                return;
+            }
+
+            const urls = batchText.split('\n').filter(url => url.trim());
+            const projects = [];
+
+            for (const url of urls) {
+                try {
+                    const urlObj = new URL(url.trim());
+                    const pathParts = urlObj.pathname.split('/');
+                    let projectName = pathParts[pathParts.length - 1];
+
+                    if (projectName.endsWith('.git')) {
+                        projectName = projectName.slice(0, -4);
+                    }
+
+                    projects.push({
+                        name: projectName,
+                        git_url: url.trim(),
+                        bot_id: defaultBotId
+                    });
+                } catch (error) {
+                    console.error('解析Git地址失败:', url, error);
+                }
+            }
+
+            try {
+                const response = await fetch('/config/projects/batch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        projects: projects,
+                        default_bot_id: defaultBotId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    const results = data.results;
+                    let message = `批量添加完成！\n`;
+                    message += `✅ 成功：${results.success.length} 个\n`;
+                    message += `❌ 失败：${results.failed.length} 个\n`;
+                    message += `⚠️ 已存在：${results.existing.length} 个`;
+
+                    if (results.existing.length > 0) {
+                        message += '\n\n已存在的项目：\n';
+                        for (const existing of results.existing) {
+                            message += `• ${existing.project_name} (${existing.current_bot})\n`;
+                        }
+                    }
+
+                    showMessage(message, 'success');
+                    document.getElementById('batch-projects').value = '';
+                    document.getElementById('batch-preview').style.display = 'none';
+                    loadMappings();
+                } else {
+                    showMessage('批量添加失败: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('网络错误: ' + error.message, 'danger');
+            }
+        }
+
+        // 添加自定义机器人（模态框）
+        async function addCustomBot() {
+            const name = document.getElementById('modal-bot-name').value;
+            const webhookUrl = document.getElementById('modal-webhook-url').value;
+
+            if (!name || !webhookUrl) {
+                showMessage('请填写完整信息', 'danger');
+                return;
+            }
+
+            const botId = await createCustomBot(name, webhookUrl);
+            if (botId) {
+                document.getElementById('custom-bot-modal').style.display = 'none';
+                document.getElementById('custom-bot-form').reset();
+                loadBots();
+            }
+        }
+
+        // 测试自定义机器人连接
+        async function testCustomBotConnection() {
+            const webhookUrl = document.getElementById('modal-webhook-url').value;
+
+            if (!webhookUrl) {
+                showMessage('请先输入Webhook URL', 'danger');
+                return;
+            }
+
+            // 这里可以添加测试连接的逻辑
+            showMessage('测试功能开发中...', 'info');
+        }
+
+        // 删除自定义机器人
+        async function deleteCustomBot(botId) {
+            if (!confirm(`确定要删除自定义机器人 "${botId}" 吗？`)) {
+                return;
+            }
+
+            const password = prompt('请输入管理员密码：');
+            if (!password) {
+                showMessage('未输入密码，操作取消', 'info');
+                return;
+            }
+
+            try {
+                const response = await fetch('/config/admin/action', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        password: password,
+                        action: 'delete_custom_bot',
+                        data: {
+                            bot_id: botId
+                        }
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    showMessage('自定义机器人删除成功！', 'success');
+                    loadBots();
+                } else {
+                    showMessage('删除失败: ' + data.message, 'danger');
+                }
+            } catch (error) {
+                showMessage('网络错误: ' + error.message, 'danger');
+            }
+        }
+
+        // 显示消息
+        function showMessage(message, type) {
+            const messageArea = document.getElementById('message-area');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.style.whiteSpace = 'pre-line'; // 支持换行
+            alertDiv.textContent = message;
+
+            messageArea.innerHTML = '';
+            messageArea.appendChild(alertDiv);
+
+            // 5秒后自动消失
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

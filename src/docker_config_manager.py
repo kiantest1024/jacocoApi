@@ -4,7 +4,6 @@ Docker环境配置管理器
 支持动态配置持久化和热重载
 """
 
-import os
 import json
 import importlib
 import logging
@@ -34,6 +33,7 @@ class DockerConfigManager:
                     "name": "默认机器人",
                     "timeout": 10,
                     "retry_count": 3,
+                    "is_custom": False,
                 }
             },
             "project_mappings": {
@@ -42,7 +42,7 @@ class DockerConfigManager:
             "version": "1.0.0",
             "last_updated": None
         }
-        
+
         self._save_config(default_config)
         logger.info("创建默认配置文件")
     
@@ -86,6 +86,51 @@ class DockerConfigManager:
         except Exception as e:
             logger.error(f"添加机器人配置失败: {e}")
             return False
+
+    def remove_bot(self, bot_id: str) -> bool:
+        """删除机器人配置（仅限自定义机器人）"""
+        try:
+            config = self._load_config()
+            if bot_id in config["lark_bots"]:
+                bot_config = config["lark_bots"][bot_id]
+                # 只允许删除自定义机器人
+                if bot_config.get("is_custom", False):
+                    del config["lark_bots"][bot_id]
+                    self._save_config(config)
+                    self._reload_config_module()
+                    logger.info(f"删除机器人配置: {bot_id}")
+                    return True
+                else:
+                    logger.warning(f"不能删除预配置机器人: {bot_id}")
+                    return False
+            return False
+        except Exception as e:
+            logger.error(f"删除机器人配置失败: {e}")
+            return False
+
+    def check_project_exists(self, project_name: str) -> Dict[str, Any]:
+        """检查项目是否已配置"""
+        try:
+            config = self._load_config()
+            mappings = config.get("project_mappings", {})
+
+            if project_name in mappings:
+                bot_id = mappings[project_name]
+                bots = config.get("lark_bots", {})
+                bot_config = bots.get(bot_id, {})
+
+                return {
+                    "exists": True,
+                    "project_name": project_name,
+                    "bot_id": bot_id,
+                    "bot_name": bot_config.get("name", "未知机器人"),
+                    "webhook_url": bot_config.get("webhook_url", "")
+                }
+
+            return {"exists": False}
+        except Exception as e:
+            logger.error(f"检查项目配置失败: {e}")
+            return {"exists": False, "error": str(e)}
     
     def add_project_mapping(self, project_name: str, bot_id: str) -> bool:
         """添加项目映射"""
@@ -119,7 +164,7 @@ class DockerConfigManager:
         """重新加载配置模块"""
         try:
             # 动态更新config模块
-            import config
+            from config import config
             
             # 更新机器人配置
             config.LARK_BOTS.clear()

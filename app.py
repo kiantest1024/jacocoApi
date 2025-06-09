@@ -339,7 +339,7 @@ def github_webhook_no_auth(request: Request):
                 report_data['html_report_url'] = html_report_url
                 logger.info(f"[{request_id}] HTML报告链接: {html_report_url}")
 
-            # 发送Lark通知
+            # 发送Lark通知 - 无论扫描成功或失败都发送
             if service_config.get('enable_notifications', True):
                 try:
                     from src.lark_notification import send_jacoco_notification
@@ -361,6 +361,7 @@ def github_webhook_no_auth(request: Request):
                     logger.info(f"[{request_id}] 目标机器人: {bot_name} (ID: {bot_id})")
                     logger.info(f"[{request_id}] Webhook URL: {webhook_url}")
                     logger.info(f"[{request_id}] 覆盖率数据: {coverage_data}")
+                    logger.info(f"[{request_id}] 扫描状态: {scan_result.get('status', 'unknown')}")
 
                     send_jacoco_notification(
                         repo_url=repo_url,

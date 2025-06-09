@@ -58,6 +58,13 @@ class LarkNotifier:
         request_id: str, html_report_url: str = None
     ) -> Dict[str, Any]:
 
+        # 检查扫描状态，如果失败则发送错误通知
+        scan_status = scan_result.get('status', 'unknown')
+        if scan_status in ['error', 'no_reports', 'failed']:
+            return self._build_scan_failure_message(
+                repo_url, branch_name, commit_id, scan_result, request_id
+            )
+
         instruction_coverage = coverage_data.get('instruction_coverage', 0)
         branch_coverage = coverage_data.get('branch_coverage', 0)
         line_coverage = coverage_data.get('line_coverage', 0)
@@ -150,7 +157,80 @@ class LarkNotifier:
         })
         
         return message
-    
+
+    def _build_scan_failure_message(
+        self, repo_url: str, branch_name: str, commit_id: str,
+        scan_result: Dict[str, Any], request_id: str
+    ) -> Dict[str, Any]:
+        """构建扫描失败的消息"""
+        repo_name = repo_url.split('/')[-1].replace('.git', '')
+        scan_status = scan_result.get('status', 'unknown')
+
+        # 根据不同的失败状态设置不同的标题和内容
+        if scan_status == 'no_reports':
+            title = f"⚠️ JaCoCo 扫描失败 - {repo_name}"
+            error_content = "## 🔧 构建失败\n\n项目构建失败，无法生成覆盖率报告。"
+
+            # 添加Maven错误信息
+            maven_output = scan_result.get('maven_output', '')
+            if maven_output:
+                # 提取关键错误信息
+                error_lines = []
+                for line in maven_output.split('\n'):
+                    if '[ERROR]' in line and line.strip():
+                        error_lines.append(line.strip())
+
+                if error_lines:
+                    error_content += f"\n\n**主要错误**:\n```\n"
+                    # 只显示前5个错误，避免消息过长
+                    for error_line in error_lines[:5]:
+                        error_content += f"{error_line}\n"
+                    if len(error_lines) > 5:
+                        error_content += f"... 还有 {len(error_lines) - 5} 个错误\n"
+                    error_content += "```"
+        else:
+            title = f"❌ JaCoCo 扫描错误 - {repo_name}"
+            error_content = f"## ⚠️ 扫描状态: {scan_status}\n\n扫描过程中发生错误。"
+
+        message = {
+            "msg_type": "interactive",
+            "card": {
+                "config": {"wide_screen_mode": True},
+                "header": {
+                    "title": {"tag": "plain_text", "content": title},
+                    "template": "red"
+                },
+                "elements": [
+                    {
+                        "tag": "div",
+                        "text": {
+                            "tag": "lark_md",
+                            "content": f"**仓库**: {repo_name}\n**分支**: {branch_name}\n**提交**: `{commit_id[:8]}`\n**时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        }
+                    },
+                    {"tag": "hr"},
+                    {
+                        "tag": "div",
+                        "text": {
+                            "tag": "lark_md",
+                            "content": error_content
+                        }
+                    },
+                    {
+                        "tag": "note",
+                        "elements": [
+                            {
+                                "tag": "plain_text",
+                                "content": f"请求ID: {request_id}"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        return message
+
     def _build_error_message(
         self,
         repo_url: str,

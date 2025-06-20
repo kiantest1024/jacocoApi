@@ -10,9 +10,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+# 强制设置环境变量为文件配置，防止 .env 文件覆盖
+os.environ['CONFIG_STORAGE_TYPE'] = 'file'
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
+    # 再次强制设置，确保不被 .env 文件覆盖
+    os.environ['CONFIG_STORAGE_TYPE'] = 'file'
 except ImportError:
     pass
 
@@ -23,22 +28,16 @@ app = FastAPI(title="JaCoCo Scanner API", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 templates = Jinja2Templates(directory="static/templates")
-CONFIG_STORAGE_TYPE = os.getenv('CONFIG_STORAGE_TYPE', 'file')
+# 强制使用文件配置
+CONFIG_MANAGER_TYPE = 'file'
 
 def init_config_manager():
     """初始化配置管理器"""
-    global CONFIG_MANAGER_TYPE
-
-    # 默认使用文件配置
     logger.info("✅ 使用文件配置管理")
-    CONFIG_MANAGER_TYPE = 'file'
     return True
 
-CONFIG_MANAGER_TYPE = 'file'
+# 初始化配置管理器
 config_init_success = init_config_manager()
-
-if not config_init_success:
-    logger.warning("配置管理器初始化失败，使用文件配置作为回退方案")
 
 class ProjectMapping(BaseModel):
     project_name: str

@@ -692,10 +692,32 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
             logger.info(f"[{request_id}] JaCoCo插件已存在，跳过增强")
             return True
 
-        # 检查并添加JUnit依赖
+        # 检查并添加测试依赖
         if 'junit' not in content.lower():
-            logger.info(f"[{request_id}] 添加JUnit依赖...")
-            junit_dependency = '''
+            logger.info(f"[{request_id}] 添加测试依赖...")
+            test_dependencies = '''
+        <!-- JUnit 5 -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.9.2</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Mockito -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>4.11.0</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Mockito JUnit Jupiter -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <version>4.11.0</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- JUnit 4 (for backward compatibility) -->
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
@@ -707,13 +729,13 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
                 # 在现有dependencies中添加
                 content = content.replace(
                     '<dependencies>',
-                    f'<dependencies>{junit_dependency}'
+                    f'<dependencies>{test_dependencies}'
                 )
-                logger.info(f"[{request_id}] 在现有dependencies中添加JUnit")
+                logger.info(f"[{request_id}] 在现有dependencies中添加测试依赖")
             else:
                 # 创建dependencies节点
                 dependencies_block = f'''
-    <dependencies>{junit_dependency}
+    <dependencies>{test_dependencies}
     </dependencies>'''
 
                 # 在</properties>后添加
@@ -725,7 +747,7 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
                     if re.search(version_pattern, content):
                         content = re.sub(version_pattern, r'\1' + dependencies_block, content, count=1)
 
-                logger.info(f"[{request_id}] 创建dependencies节点并添加JUnit")
+                logger.info(f"[{request_id}] 创建dependencies节点并添加测试依赖")
 
         # 添加JaCoCo属性
         jacoco_property = '<jacoco.version>0.8.7</jacoco.version>'
@@ -749,8 +771,28 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
                 content = re.sub(version_pattern, r'\1' + properties_block, content, count=1)
                 logger.info(f"[{request_id}] 创建properties节点并添加JaCoCo版本")
 
-        # 添加JaCoCo插件
-        jacoco_plugin = '''
+        # 添加Maven插件
+        maven_plugins = '''
+            <!-- Maven Compiler Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>11</source>
+                    <target>11</target>
+                </configuration>
+            </plugin>
+            <!-- Maven Surefire Plugin for JUnit 5 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.0.0-M9</version>
+                <configuration>
+                    <testFailureIgnore>true</testFailureIgnore>
+                </configuration>
+            </plugin>
+            <!-- JaCoCo Plugin -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -776,24 +818,24 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
             # 在现有plugins中添加
             content = content.replace(
                 '<plugins>',
-                f'<plugins>{jacoco_plugin}'
+                f'<plugins>{maven_plugins}'
             )
-            logger.info(f"[{request_id}] 在现有plugins中添加JaCoCo插件")
+            logger.info(f"[{request_id}] 在现有plugins中添加Maven插件")
         elif '<build>' in content:
             # 在build中创建plugins
             plugins_block = f'''
-        <plugins>{jacoco_plugin}
+        <plugins>{maven_plugins}
         </plugins>'''
             content = content.replace(
                 '<build>',
                 f'<build>{plugins_block}'
             )
-            logger.info(f"[{request_id}] 在build中创建plugins并添加JaCoCo插件")
+            logger.info(f"[{request_id}] 在build中创建plugins并添加Maven插件")
         else:
             # 创建完整的build节点
             build_block = f'''
     <build>
-        <plugins>{jacoco_plugin}
+        <plugins>{maven_plugins}
         </plugins>
     </build>'''
             # 在</dependencies>后或</properties>后添加
@@ -804,7 +846,7 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
             else:
                 # 在</project>前添加
                 content = content.replace('</project>', f'{build_block}\n</project>')
-            logger.info(f"[{request_id}] 创建完整的build节点并添加JaCoCo插件")
+            logger.info(f"[{request_id}] 创建完整的build节点并添加Maven插件")
 
         # 写回文件
         with open(pom_path, 'w', encoding='utf-8') as f:

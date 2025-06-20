@@ -172,34 +172,111 @@ try:
     properties = root.find('maven:properties', ns)
     if properties is None:
         properties = ET.SubElement(root, 'properties')
-    
+
     jacoco_version = ET.SubElement(properties, 'jacoco.version')
     jacoco_version.text = '0.8.8'
+
+    # 添加其他必要属性
+    maven_compiler_source = ET.SubElement(properties, 'maven.compiler.source')
+    maven_compiler_source.text = '11'
+    maven_compiler_target = ET.SubElement(properties, 'maven.compiler.target')
+    maven_compiler_target.text = '11'
+    project_encoding = ET.SubElement(properties, 'project.build.sourceEncoding')
+    project_encoding.text = 'UTF-8'
+
+    junit_version = ET.SubElement(properties, 'junit.version')
+    junit_version.text = '5.9.2'
+    mockito_version = ET.SubElement(properties, 'mockito.version')
+    mockito_version.text = '4.11.0'
     
+    # 添加依赖
+    dependencies = root.find('maven:dependencies', ns)
+    if dependencies is None:
+        dependencies = ET.SubElement(root, 'dependencies')
+
+    # JUnit 5 依赖
+    junit_dep = ET.SubElement(dependencies, 'dependency')
+    junit_group = ET.SubElement(junit_dep, 'groupId')
+    junit_group.text = 'org.junit.jupiter'
+    junit_artifact = ET.SubElement(junit_dep, 'artifactId')
+    junit_artifact.text = 'junit-jupiter'
+    junit_ver = ET.SubElement(junit_dep, 'version')
+    junit_ver.text = '${junit.version}'
+    junit_scope = ET.SubElement(junit_dep, 'scope')
+    junit_scope.text = 'test'
+
+    # Mockito 依赖
+    mockito_dep = ET.SubElement(dependencies, 'dependency')
+    mockito_group = ET.SubElement(mockito_dep, 'groupId')
+    mockito_group.text = 'org.mockito'
+    mockito_artifact = ET.SubElement(mockito_dep, 'artifactId')
+    mockito_artifact.text = 'mockito-core'
+    mockito_ver = ET.SubElement(mockito_dep, 'version')
+    mockito_ver.text = '${mockito.version}'
+    mockito_scope = ET.SubElement(mockito_dep, 'scope')
+    mockito_scope.text = 'test'
+
+    # Mockito JUnit Jupiter 依赖
+    mockito_junit_dep = ET.SubElement(dependencies, 'dependency')
+    mockito_junit_group = ET.SubElement(mockito_junit_dep, 'groupId')
+    mockito_junit_group.text = 'org.mockito'
+    mockito_junit_artifact = ET.SubElement(mockito_junit_dep, 'artifactId')
+    mockito_junit_artifact.text = 'mockito-junit-jupiter'
+    mockito_junit_ver = ET.SubElement(mockito_junit_dep, 'version')
+    mockito_junit_ver.text = '${mockito.version}'
+    mockito_junit_scope = ET.SubElement(mockito_junit_dep, 'scope')
+    mockito_junit_scope.text = 'test'
+
     # 查找或创建build节点
     build = root.find('maven:build', ns)
     if build is None:
         build = ET.SubElement(root, 'build')
-    
+
     # 查找或创建plugins节点
     plugins = build.find('maven:plugins', ns)
     if plugins is None:
         plugins = ET.SubElement(build, 'plugins')
     
+    # Maven Compiler Plugin
+    compiler_plugin = ET.SubElement(plugins, 'plugin')
+    comp_group = ET.SubElement(compiler_plugin, 'groupId')
+    comp_group.text = 'org.apache.maven.plugins'
+    comp_artifact = ET.SubElement(compiler_plugin, 'artifactId')
+    comp_artifact.text = 'maven-compiler-plugin'
+    comp_version = ET.SubElement(compiler_plugin, 'version')
+    comp_version.text = '3.11.0'
+    comp_config = ET.SubElement(compiler_plugin, 'configuration')
+    comp_source = ET.SubElement(comp_config, 'source')
+    comp_source.text = '11'
+    comp_target = ET.SubElement(comp_config, 'target')
+    comp_target.text = '11'
+
+    # Maven Surefire Plugin (for JUnit 5)
+    surefire_plugin = ET.SubElement(plugins, 'plugin')
+    sure_group = ET.SubElement(surefire_plugin, 'groupId')
+    sure_group.text = 'org.apache.maven.plugins'
+    sure_artifact = ET.SubElement(surefire_plugin, 'artifactId')
+    sure_artifact.text = 'maven-surefire-plugin'
+    sure_version = ET.SubElement(surefire_plugin, 'version')
+    sure_version.text = '3.0.0-M9'
+    sure_config = ET.SubElement(surefire_plugin, 'configuration')
+    sure_fail_ignore = ET.SubElement(sure_config, 'testFailureIgnore')
+    sure_fail_ignore.text = 'true'
+
     # 添加JaCoCo插件
     jacoco_plugin = ET.SubElement(plugins, 'plugin')
-    
+
     group_id = ET.SubElement(jacoco_plugin, 'groupId')
     group_id.text = 'org.jacoco'
-    
+
     artifact_id = ET.SubElement(jacoco_plugin, 'artifactId')
     artifact_id.text = 'jacoco-maven-plugin'
-    
+
     version = ET.SubElement(jacoco_plugin, 'version')
     version.text = '${jacoco.version}'
-    
+
     executions = ET.SubElement(jacoco_plugin, 'executions')
-    
+
     # prepare-agent execution
     execution1 = ET.SubElement(executions, 'execution')
     exec1_id = ET.SubElement(execution1, 'id')
@@ -207,7 +284,7 @@ try:
     exec1_goals = ET.SubElement(execution1, 'goals')
     exec1_goal = ET.SubElement(exec1_goals, 'goal')
     exec1_goal.text = 'prepare-agent'
-    
+
     # report execution
     execution2 = ET.SubElement(executions, 'execution')
     exec2_id = ET.SubElement(execution2, 'id')
@@ -265,7 +342,23 @@ log_info "编译测试代码..."
 if mvn test-compile -q; then
     log_success "测试代码编译成功"
 else
-    log_warning "测试代码编译失败"
+    log_warning "测试代码编译失败，尝试修复依赖..."
+
+    # 使用依赖修复工具
+    if [[ -f "/app/scripts/fix-dependencies.py" ]]; then
+        log_info "运行依赖修复工具..."
+        python3 /app/scripts/fix-dependencies.py .
+
+        # 重新尝试编译
+        log_info "重新编译测试代码..."
+        if mvn test-compile -q; then
+            log_success "依赖修复后编译成功"
+        else
+            log_warning "依赖修复后仍然编译失败"
+        fi
+    else
+        log_warning "依赖修复工具不可用"
+    fi
 fi
 
 # 运行测试和生成报告

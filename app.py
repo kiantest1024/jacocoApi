@@ -29,44 +29,10 @@ def init_config_manager():
     """初始化配置管理器"""
     global CONFIG_MANAGER_TYPE
 
-    if CONFIG_STORAGE_TYPE == 'mysql':
-        try:
-            from src.database import init_database
-            from src.mysql_config_manager import get_mysql_config_manager
-
-            logger.info("正在初始化MySQL配置管理器...")
-            if init_database():
-                # 测试MySQL连接
-                mysql_manager = get_mysql_config_manager()
-                status = mysql_manager.get_config_status()
-                logger.info(f"✅ MySQL配置管理已启用 - {status.get('storage_type', 'MySQL')}")
-                CONFIG_MANAGER_TYPE = 'mysql'
-                return True
-            else:
-                logger.warning("❌ MySQL初始化失败，回退到文件配置")
-                CONFIG_MANAGER_TYPE = 'file'
-                return False
-        except Exception as e:
-            logger.error(f"❌ MySQL配置管理器初始化失败: {e}")
-            logger.warning("回退到文件配置")
-            CONFIG_MANAGER_TYPE = 'file'
-            return False
-
-    elif os.path.exists("/app/config"):
-        try:
-            from src.docker_config_manager import init_docker_config, get_docker_config_manager
-            init_docker_config()
-            logger.info("✅ Docker配置管理已启用")
-            CONFIG_MANAGER_TYPE = 'docker'
-            return True
-        except Exception as e:
-            logger.error(f"❌ Docker配置管理器初始化失败: {e}")
-            CONFIG_MANAGER_TYPE = 'file'
-            return False
-    else:
-        logger.info("✅ 使用文件配置管理")
-        CONFIG_MANAGER_TYPE = 'file'
-        return True
+    # 默认使用文件配置
+    logger.info("✅ 使用文件配置管理")
+    CONFIG_MANAGER_TYPE = 'file'
+    return True
 
 CONFIG_MANAGER_TYPE = 'file'
 config_init_success = init_config_manager()
@@ -102,15 +68,8 @@ app.mount("/reports", StaticFiles(directory=REPORTS_BASE_DIR), name="reports")
 
 def get_config_manager():
     """获取当前配置管理器"""
-    if CONFIG_MANAGER_TYPE == 'mysql':
-        from src.mysql_config_manager import get_mysql_config_manager
-        return get_mysql_config_manager()
-    elif CONFIG_MANAGER_TYPE == 'docker':
-        from src.docker_config_manager import get_docker_config_manager
-        return get_docker_config_manager()
-    else:
-        # 返回文件配置管理器的包装器
-        return FileConfigWrapper()
+    # 返回文件配置管理器的包装器
+    return FileConfigWrapper()
 
 class FileConfigWrapper:
 

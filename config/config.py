@@ -35,6 +35,8 @@ DEFAULT_SCAN_CONFIG: Dict[str, Any] = {
     "force_local_scan": False,
     "scan_timeout": 1800,
     "enable_notifications": True,
+    "debug_mode": False,
+    "verbose_logging": False,
 }
 
 def get_bot_for_project(repo_url: str, project_name: str) -> str:

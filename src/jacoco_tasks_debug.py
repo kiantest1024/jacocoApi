@@ -107,6 +107,64 @@ def _run_maven_command(command: List[str], cwd: str, request_id: str, step: str,
         logger.error(f"[{request_id}] 💥 [{step}] 命令执行异常: {e}")
         raise
 
+def _analyze_test_output(output: str, request_id: str):
+    """专门分析测试输出，显示详细的测试执行信息"""
+    logger.info(f"[{request_id}] 🧪 分析测试执行详情...")
+
+    lines = output.split('\n')
+    test_classes = []
+    test_methods = []
+    test_results = []
+
+    current_test_class = None
+
+    for line in lines:
+        line = line.strip()
+
+        # 检测测试类开始
+        if "Running " in line and "Test" in line:
+            current_test_class = line.replace("Running ", "").strip()
+            test_classes.append(current_test_class)
+            logger.info(f"[{request_id}] 🏃 运行测试类: {current_test_class}")
+
+        # 检测单个测试方法
+        elif "test" in line.lower() and ("PASSED" in line or "FAILED" in line or "ERROR" in line):
+            test_methods.append(line)
+            if "PASSED" in line:
+                logger.info(f"[{request_id}] ✅ 测试通过: {line}")
+            elif "FAILED" in line:
+                logger.warning(f"[{request_id}] ❌ 测试失败: {line}")
+            elif "ERROR" in line:
+                logger.error(f"[{request_id}] 💥 测试错误: {line}")
+
+        # 检测测试结果摘要
+        elif "Tests run:" in line:
+            test_results.append(line)
+            logger.info(f"[{request_id}] 📊 测试结果: {line}")
+
+        # 检测测试输出（System.out.println等）
+        elif current_test_class and ("System.out" in line or "println" in line or "log" in line.lower()):
+            logger.debug(f"[{request_id}] 📝 测试输出: {line}")
+
+        # 检测断言失败
+        elif "AssertionError" in line or "AssertionFailedError" in line:
+            logger.error(f"[{request_id}] 🔴 断言失败: {line}")
+
+        # 检测异常
+        elif "Exception" in line and "at " in line:
+            logger.error(f"[{request_id}] 💥 异常: {line}")
+
+    # 总结测试执行情况
+    logger.info(f"[{request_id}] 📋 测试执行总结:")
+    logger.info(f"[{request_id}]   测试类数量: {len(test_classes)}")
+    logger.info(f"[{request_id}]   测试方法数量: {len(test_methods)}")
+    logger.info(f"[{request_id}]   结果记录数量: {len(test_results)}")
+
+    if test_classes:
+        logger.info(f"[{request_id}] 🏃 执行的测试类:")
+        for test_class in test_classes:
+            logger.info(f"[{request_id}]   - {test_class}")
+
 def _analyze_maven_output(output: str, request_id: str) -> Dict[str, Any]:
     """分析Maven输出，提取关键信息"""
     logger.debug(f"[{request_id}] [DEBUG] 分析Maven输出...")
@@ -196,11 +254,15 @@ def run_jacoco_scan_docker_debug(repo_url: str, commit_id: str, branch_name: str
         logger.debug(f"[{request_id}] [DEBUG] 临时目录: {temp_dir}")
         
         # 构建Docker命令
+        service_name = service_config.get('service_name', 'unknown')
         docker_cmd = [
             'docker', 'run', '--rm',
             '-v', f"{temp_dir}:/workspace/reports",
             'jacoco-scanner:latest',
-            repo_url, commit_id, branch_name
+            '--repo-url', repo_url,
+            '--commit-id', commit_id,
+            '--branch', branch_name,
+            '--service-name', service_name
         ]
         
         logger.info(f"[{request_id}] 🐳 执行Docker扫描...")
@@ -296,14 +358,24 @@ def run_jacoco_scan_local_debug(repo_url: str, commit_id: str, branch_name: str,
         
         for i, goal in enumerate(maven_goals):
             step_name = f"Maven {goal} ({i+1}/{len(maven_goals)})"
-            maven_cmd = ['mvn', goal, '-B', '-e']
-            
+
+            # 为测试步骤添加详细输出参数
+            if goal == 'test':
+                maven_cmd = ['mvn', goal, '-B', '-e', '-X']  # 添加 -X 参数显示详细输出
+                logger.info(f"[{request_id}] 🧪 启用详细测试输出模式")
+            else:
+                maven_cmd = ['mvn', goal, '-B', '-e']
+
             result = _run_maven_command(maven_cmd, temp_dir, request_id, step_name, timeout=600)
             all_output += result.stdout + result.stderr
-            
+
+            # 特别处理测试步骤的输出
+            if goal == 'test':
+                _analyze_test_output(result.stdout + result.stderr, request_id)
+
             # 分析每个步骤的输出
             step_analysis = _analyze_maven_output(result.stdout + result.stderr, request_id)
-            
+
             # 合并分析结果
             analysis_combined["tests_run"] += step_analysis["tests_run"]
             analysis_combined["tests_failed"] += step_analysis["tests_failed"]
@@ -313,7 +385,7 @@ def run_jacoco_scan_local_debug(repo_url: str, commit_id: str, branch_name: str,
             analysis_combined["test_failures"].extend(step_analysis["test_failures"])
             analysis_combined["jacoco_info"].extend(step_analysis["jacoco_info"])
             analysis_combined["build_warnings"].extend(step_analysis["build_warnings"])
-            
+
             if result.returncode != 0 and goal in ['compile', 'test-compile']:
                 logger.error(f"[{request_id}] ❌ 关键步骤失败: {goal}")
                 break

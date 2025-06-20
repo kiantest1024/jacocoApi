@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
-"""
-JaCoCo API 诊断脚本
-用于检查和诊断 JaCoCo 扫描问题
-"""
+"""JaCoCo API 诊断工具"""
 
 import os
 import subprocess
 import sys
-import json
 import tempfile
-from pathlib import Path
 
 def check_docker():
     """检查Docker环境"""

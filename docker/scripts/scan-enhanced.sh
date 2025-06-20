@@ -1,32 +1,27 @@
 #!/bin/bash
+# JaCoCo Docker 扫描脚本
 
-# JaCoCo Docker扫描脚本 - Enhanced Version
 set -e
 
-# 启用详细日志
-set -x
-
-# 默认参数
 REPO_URL=""
 COMMIT_ID=""
 BRANCH=""
 SERVICE_NAME=""
 
-# 日志函数
 log_info() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] INFO: $1"
+    echo "[$(date '+%H:%M:%S')] INFO: $1"
 }
 
 log_error() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
+    echo "[$(date '+%H:%M:%S')] ERROR: $1" >&2
 }
 
 log_success() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $1"
+    echo "[$(date '+%H:%M:%S')] SUCCESS: $1"
 }
 
 log_warning() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $1"
+    echo "[$(date '+%H:%M:%S')] WARNING: $1"
 }
 
 # 解析命令行参数
@@ -69,10 +64,8 @@ log_info "分支: $BRANCH"
 log_info "服务: $SERVICE_NAME"
 
 # 显示环境信息
-log_info "环境信息:"
-log_info "Java版本: $(java -version 2>&1 | head -1)"
-log_info "Maven版本: $(mvn --version | head -1)"
-log_info "Git版本: $(git --version)"
+log_info "Java: $(java -version 2>&1 | head -1)"
+log_info "Maven: $(mvn --version | head -1)"
 
 # 设置路径
 REPO_DIR="/app/repos/$SERVICE_NAME"

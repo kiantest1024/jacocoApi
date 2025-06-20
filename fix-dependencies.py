@@ -57,6 +57,14 @@ def analyze_test_files(project_dir):
                             '@ExtendWith(MockitoExtension.class)'
                         ]):
                             dependencies_needed.add('mockito')
+
+                        # 检查 AssertJ
+                        if any(import_stmt in content for import_stmt in [
+                            'org.assertj.core.api',
+                            'assertThat(',
+                            'Assertions.assertThat'
+                        ]):
+                            dependencies_needed.add('assertj')
                         
                         # 检查 JUnit 4
                         if any(import_stmt in content for import_stmt in [
@@ -104,6 +112,7 @@ def fix_pom_xml(pom_path, dependencies_needed):
             'project.build.sourceEncoding': 'UTF-8',
             'junit.version': '5.9.2',
             'mockito.version': '4.11.0',
+            'assertj.version': '3.24.2',
             'jacoco.version': '0.8.8'
         }
         
@@ -162,6 +171,14 @@ def fix_pom_xml(pom_path, dependencies_needed):
                 'groupId': 'junit',
                 'artifactId': 'junit',
                 'version': '4.13.2',
+                'scope': 'test'
+            })
+
+        if 'assertj' in dependencies_needed:
+            deps_to_add.append({
+                'groupId': 'org.assertj',
+                'artifactId': 'assertj-core',
+                'version': '${assertj.version}',
                 'scope': 'test'
             })
         

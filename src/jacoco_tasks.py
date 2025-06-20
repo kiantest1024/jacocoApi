@@ -723,6 +723,13 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
             <artifactId>junit</artifactId>
             <version>4.13.2</version>
             <scope>test</scope>
+        </dependency>
+        <!-- AssertJ -->
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.24.2</version>
+            <scope>test</scope>
         </dependency>'''
 
             if '<dependencies>' in content:

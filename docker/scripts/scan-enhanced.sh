@@ -188,6 +188,8 @@ try:
     junit_version.text = '5.9.2'
     mockito_version = ET.SubElement(properties, 'mockito.version')
     mockito_version.text = '4.11.0'
+    assertj_version = ET.SubElement(properties, 'assertj.version')
+    assertj_version.text = '3.24.2'
     
     # 添加依赖
     dependencies = root.find('maven:dependencies', ns)
@@ -226,6 +228,17 @@ try:
     mockito_junit_ver.text = '${mockito.version}'
     mockito_junit_scope = ET.SubElement(mockito_junit_dep, 'scope')
     mockito_junit_scope.text = 'test'
+
+    # AssertJ 依赖
+    assertj_dep = ET.SubElement(dependencies, 'dependency')
+    assertj_group = ET.SubElement(assertj_dep, 'groupId')
+    assertj_group.text = 'org.assertj'
+    assertj_artifact = ET.SubElement(assertj_dep, 'artifactId')
+    assertj_artifact.text = 'assertj-core'
+    assertj_ver = ET.SubElement(assertj_dep, 'version')
+    assertj_ver.text = '${assertj.version}'
+    assertj_scope = ET.SubElement(assertj_dep, 'scope')
+    assertj_scope.text = 'test'
 
     # 查找或创建build节点
     build = root.find('maven:build', ns)
@@ -322,59 +335,59 @@ export JAVA_OPTS="-Xmx2g"
 
 log_info "Maven环境变量: MAVEN_OPTS=$MAVEN_OPTS"
 
-# 运行Maven测试和JaCoCo
-log_info "运行Maven测试和JaCoCo..."
+# 使用智能编译修复
+log_info "使用智能编译修复..."
 
-# 清理之前的构建
-log_info "清理之前的构建..."
-mvn clean -q
+if [[ -f "/app/scripts/smart-compile.sh" ]]; then
+    if /app/scripts/smart-compile.sh; then
+        log_success "智能编译修复成功，继续正常流程"
 
-# 编译项目
-log_info "编译项目..."
-if mvn compile -q; then
-    log_success "项目编译成功"
-else
-    log_warning "项目编译失败，继续尝试测试"
-fi
+        # 运行测试和生成报告
+        log_info "运行测试和生成JaCoCo报告..."
+        mvn test jacoco:report \
+            -Dmaven.test.failure.ignore=true \
+            -Dproject.build.sourceEncoding=UTF-8 \
+            -Dmaven.compiler.source=11 \
+            -Dmaven.compiler.target=11 \
+            -Dmaven.resolver.transport=wagon \
+            -Dmaven.wagon.http.retryHandler.count=3 \
+            -Dmaven.wagon.http.pool=false \
+            -U
 
-# 编译测试代码
-log_info "编译测试代码..."
-if mvn test-compile -q; then
-    log_success "测试代码编译成功"
-else
-    log_warning "测试代码编译失败，尝试修复依赖..."
-
-    # 使用依赖修复工具
-    if [[ -f "/app/scripts/fix-dependencies.py" ]]; then
-        log_info "运行依赖修复工具..."
-        python3 /app/scripts/fix-dependencies.py .
-
-        # 重新尝试编译
-        log_info "重新编译测试代码..."
-        if mvn test-compile -q; then
-            log_success "依赖修复后编译成功"
-        else
-            log_warning "依赖修复后仍然编译失败"
-        fi
+        MAVEN_EXIT_CODE=$?
+        log_info "Maven执行完成，返回码: $MAVEN_EXIT_CODE"
     else
-        log_warning "依赖修复工具不可用"
+        log_warning "智能编译修复失败，但可能已生成最小报告"
+        MAVEN_EXIT_CODE=1
     fi
+else
+    log_warning "智能编译脚本不可用，使用传统方式"
+
+    # 传统编译方式
+    log_info "清理之前的构建..."
+    mvn clean -q
+
+    log_info "编译项目..."
+    mvn compile -q || log_warning "项目编译失败"
+
+    log_info "编译测试代码..."
+    mvn test-compile -q || log_warning "测试代码编译失败"
+
+    # 运行测试和生成报告
+    log_info "运行测试和生成JaCoCo报告..."
+    mvn test jacoco:report \
+        -Dmaven.test.failure.ignore=true \
+        -Dproject.build.sourceEncoding=UTF-8 \
+        -Dmaven.compiler.source=11 \
+        -Dmaven.compiler.target=11 \
+        -Dmaven.resolver.transport=wagon \
+        -Dmaven.wagon.http.retryHandler.count=3 \
+        -Dmaven.wagon.http.pool=false \
+        -U
+
+    MAVEN_EXIT_CODE=$?
+    log_info "Maven执行完成，返回码: $MAVEN_EXIT_CODE"
 fi
-
-# 运行测试和生成报告
-log_info "运行测试和生成JaCoCo报告..."
-mvn test jacoco:report \
-    -Dmaven.test.failure.ignore=true \
-    -Dproject.build.sourceEncoding=UTF-8 \
-    -Dmaven.compiler.source=11 \
-    -Dmaven.compiler.target=11 \
-    -Dmaven.resolver.transport=wagon \
-    -Dmaven.wagon.http.retryHandler.count=3 \
-    -Dmaven.wagon.http.pool=false \
-    -U
-
-MAVEN_EXIT_CODE=$?
-log_info "Maven执行完成，返回码: $MAVEN_EXIT_CODE"
 
 # 检查target目录
 log_info "检查target目录结构:"

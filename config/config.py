@@ -33,7 +33,8 @@ DEFAULT_SCAN_CONFIG: Dict[str, Any] = {
     "maven_goals": ["clean", "test", "jacoco:report"],
     "use_docker": True,
     "force_local_scan": False,
-    "scan_timeout": 1800,
+    "scan_timeout": 1800,  # 正常模式30分钟
+    "debug_timeout": 300,   # 调试模式5分钟
     "enable_notifications": True,
     "debug_mode": False,
     "verbose_logging": False,

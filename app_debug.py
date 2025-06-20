@@ -384,6 +384,14 @@ def github_webhook_no_auth_debug(request: Request):
         service_config = get_service_config(repo_url)
         service_name = service_config['service_name']
 
+        # 调试模式强制使用较短超时
+        service_config.update({
+            'debug_mode': True,
+            'debug_timeout': 180,  # 调试模式3分钟超时
+            'scan_timeout': 180,   # 强制短超时
+            'verbose_logging': True
+        })
+
         logger.info(f"[{request_id}] 🎯 开始调试扫描...")
         logger.info(f"[{request_id}] 📋 项目: {service_name}")
         logger.info(f"[{request_id}] 🔗 仓库: {repo_url}")

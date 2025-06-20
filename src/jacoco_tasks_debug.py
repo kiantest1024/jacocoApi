@@ -68,6 +68,27 @@ def _check_docker_available(request_id: str) -> bool:
         logger.error(f"[{request_id}] ❌ Docker检查异常: {e}")
         return False
 
+def _monitor_long_running_process(process: subprocess.Popen, request_id: str, step: str, timeout: int):
+    """监控长时间运行的进程"""
+    start_time = time.time()
+    last_check = start_time
+
+    while process.poll() is None:  # 进程还在运行
+        current_time = time.time()
+        elapsed = current_time - start_time
+
+        # 每30秒报告一次进度
+        if current_time - last_check >= 30:
+            logger.info(f"[{request_id}] ⏳ [{step}] 仍在运行... 已用时: {elapsed:.1f}秒")
+            last_check = current_time
+
+        # 检查是否超时
+        if elapsed >= timeout:
+            logger.warning(f"[{request_id}] ⏰ [{step}] 即将超时 ({timeout}秒)")
+            break
+
+        time.sleep(5)  # 每5秒检查一次
+
 def _run_maven_command(command: List[str], cwd: str, request_id: str, step: str, timeout: int = 600) -> subprocess.CompletedProcess:
     """运行Maven命令并记录详细输出"""
     cmd_str = ' '.join(command)
@@ -77,27 +98,63 @@ def _run_maven_command(command: List[str], cwd: str, request_id: str, step: str,
     logger.debug(f"[{request_id}] [DEBUG] 超时时间: {timeout}秒")
     
     start_time = time.time()
-    
+
     try:
-        result = subprocess.run(
-            command,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout
-        )
-        
+        # 对于长时间运行的命令，使用 Popen 进行实时监控
+        if timeout > 300:  # 超过5分钟的命令使用实时监控
+            logger.info(f"[{request_id}] 🔍 [{step}] 启用实时监控模式...")
+
+            process = subprocess.Popen(
+                command,
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            # 启动监控
+            import threading
+            monitor_thread = threading.Thread(
+                target=_monitor_long_running_process,
+                args=(process, request_id, step, timeout)
+            )
+            monitor_thread.daemon = True
+            monitor_thread.start()
+
+            # 等待进程完成
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+                result = subprocess.CompletedProcess(
+                    command, process.returncode, stdout, stderr
+                )
+            except subprocess.TimeoutExpired:
+                logger.error(f"[{request_id}] ⏰ [{step}] 进程超时，强制终止")
+                process.kill()
+                stdout, stderr = process.communicate()
+                result = subprocess.CompletedProcess(
+                    command, -1, stdout, stderr
+                )
+        else:
+            # 短时间命令使用原来的方式
+            result = subprocess.run(
+                command,
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+
         end_time = time.time()
         duration = end_time - start_time
-        
+
         logger.info(f"[{request_id}] ⏱️  [{step}] 执行时间: {duration:.2f}秒")
         _log_command_output(cmd_str, result, request_id, step)
-        
+
         if result.returncode == 0:
             logger.info(f"[{request_id}] ✅ [{step}] 执行成功")
         else:
             logger.error(f"[{request_id}] ❌ [{step}] 执行失败，返回码: {result.returncode}")
-        
+
         return result
         
     except subprocess.TimeoutExpired:
@@ -266,8 +323,16 @@ def run_jacoco_scan_docker_debug(repo_url: str, commit_id: str, branch_name: str
         ]
         
         logger.info(f"[{request_id}] 🐳 执行Docker扫描...")
-        result = _run_maven_command(docker_cmd, temp_dir, request_id, "Docker扫描", 
-                                   timeout=service_config.get('scan_timeout', 1800))
+
+        # 在调试模式下使用较短的超时时间
+        debug_timeout = service_config.get('debug_timeout', 300)  # 调试模式默认5分钟
+        normal_timeout = service_config.get('scan_timeout', 1800)  # 正常模式30分钟
+
+        timeout = debug_timeout if service_config.get('debug_mode', False) else normal_timeout
+        logger.info(f"[{request_id}] ⏰ 使用超时时间: {timeout}秒 ({'调试模式' if service_config.get('debug_mode') else '正常模式'})")
+
+        # 启动 Docker 扫描
+        result = _run_maven_command(docker_cmd, temp_dir, request_id, "Docker扫描", timeout=timeout)
         
         # 分析输出
         analysis = _analyze_maven_output(result.stdout + result.stderr, request_id)

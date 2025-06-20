@@ -159,6 +159,8 @@ EOF
 EOF
 
     print_success "简单测试项目已创建: $project_dir"
+
+    # 返回项目目录路径（不包含颜色代码）
     echo "$project_dir"
 }
 
@@ -326,13 +328,14 @@ test_with_docker() {
 # 主函数
 main() {
     print_info "开始简化测试验证..."
-    
-    # 创建并测试简单项目
-    local project_dir=$(create_simple_project)
-    
+
+    # 创建简单项目
+    local project_dir="simple_test_project"
+    create_simple_project > /dev/null
+
     if test_simple_project "$project_dir"; then
         print_success "本地 Maven 测试成功"
-        
+
         # 测试 Docker 环境
         test_with_docker "$project_dir"
     else

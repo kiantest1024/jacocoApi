@@ -1,4 +1,4 @@
-# JaCoCo Scanner Docker Image
+# JaCoCo Scanner Docker Image - Enhanced Version
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -11,14 +11,24 @@ RUN apt-get update && apt-get install -y \
     maven \
     openjdk-11-jdk \
     curl \
+    wget \
     tzdata \
     sed \
     grep \
+    xmlstarlet \
+    python3 \
+    python3-pip \
+    bc \
+    tree \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置Java环境
 ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 ENV PATH=$PATH:$JAVA_HOME/bin
+
+# 设置Maven环境变量
+ENV MAVEN_OPTS="-Xmx2g -XX:MetaspaceSize=512m"
+ENV MAVEN_CONFIG=""
 
 # 创建工作目录
 WORKDIR /app
@@ -28,7 +38,14 @@ COPY scripts/ /app/scripts/
 RUN chmod +x /app/scripts/*.sh
 
 # 创建必要的目录
-RUN mkdir -p /app/repos /app/reports
+RUN mkdir -p /app/repos /app/reports /app/logs
+
+# 创建Maven设置文件
+RUN mkdir -p /root/.m2
+COPY scripts/settings.xml /root/.m2/settings.xml
+
+# 预下载一些常用的Maven插件以加速构建
+RUN mvn help:evaluate -Dexpression=maven.version -q -DforceStdout || true
 
 # 设置入口点
-ENTRYPOINT ["/app/scripts/scan.sh"]
+ENTRYPOINT ["/app/scripts/scan-enhanced.sh"]

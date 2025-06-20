@@ -1,13 +1,29 @@
 #!/bin/bash
 
-# JaCoCo Docker扫描脚本
+# JaCoCo Docker扫描脚本 - Enhanced Version
 set -e
+
+# 启用详细日志
+set -x
 
 # 默认参数
 REPO_URL=""
 COMMIT_ID=""
 BRANCH=""
 SERVICE_NAME=""
+
+# 日志函数
+log_info() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] INFO: $1"
+}
+
+log_error() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
+}
+
+log_success() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $1"
+}
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do

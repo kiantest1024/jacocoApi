@@ -234,6 +234,10 @@ if [[ -d "target/site/jacoco" ]]; then
 fi
 
 # 生成摘要
-/app/scripts/generate-summary.sh "$REPORTS_DIR"
+if [[ -f "/app/scripts/generate-summary.sh" ]]; then
+    /app/scripts/generate-summary.sh "$REPORTS_DIR"
+else
+    echo "警告: 未找到 generate-summary.sh 脚本"
+fi
 
 echo "JaCoCo扫描完成"

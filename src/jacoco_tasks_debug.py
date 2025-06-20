@@ -32,41 +32,10 @@ def _log_command_output(command: str, result: subprocess.CompletedProcess, reque
                 logger.warning(f"[{request_id}] STDERR: {line}")
 
 def _check_docker_available(request_id: str) -> bool:
-    """检查Docker是否可用（调试版本）"""
-    logger.debug(f"[{request_id}] [DEBUG] 检查Docker环境...")
-    
-    try:
-        # 检查Docker版本
-        result = subprocess.run(['docker', '--version'], capture_output=True, text=True, timeout=5)
-        _log_command_output('docker --version', result, request_id, 'Docker版本检查')
-        
-        if result.returncode != 0:
-            logger.error(f"[{request_id}] ❌ Docker版本检查失败")
-            return False
-
-        # 检查Docker服务状态
-        result = subprocess.run(['docker', 'info'], capture_output=True, text=True, timeout=5)
-        _log_command_output('docker info', result, request_id, 'Docker服务检查')
-        
-        if result.returncode != 0:
-            logger.error(f"[{request_id}] ❌ Docker服务不可用")
-            return False
-
-        # 检查JaCoCo镜像
-        image_name = 'jacoco-scanner:latest'
-        result = subprocess.run(['docker', 'images', '-q', image_name], capture_output=True, text=True, timeout=5)
-        _log_command_output(f'docker images -q {image_name}', result, request_id, 'Docker镜像检查')
-
-        if not result.stdout.strip():
-            logger.warning(f"[{request_id}] ⚠️  Docker镜像不存在，将使用本地扫描")
-            return False
-
-        logger.info(f"[{request_id}] ✅ Docker环境可用")
-        return True
-
-    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
-        logger.error(f"[{request_id}] ❌ Docker检查异常: {e}")
-        return False
+    """检查Docker是否可用（调试版本）- 强制跳过Docker"""
+    logger.warning(f"[{request_id}] 🚫 调试模式强制跳过Docker扫描")
+    logger.info(f"[{request_id}] 💡 原因: Docker扫描经常超时，直接使用本地扫描更稳定")
+    return False
 
 def _monitor_long_running_process(process: subprocess.Popen, request_id: str, step: str, timeout: int):
     """监控长时间运行的进程"""

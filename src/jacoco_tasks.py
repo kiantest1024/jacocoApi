@@ -757,7 +757,7 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
                 logger.info(f"[{request_id}] 创建dependencies节点并添加测试依赖")
 
         # 添加JaCoCo属性
-        jacoco_property = '<jacoco.version>0.8.7</jacoco.version>'
+        jacoco_property = '<jacoco.version>0.8.8</jacoco.version>'
 
         if '<properties>' in content and jacoco_property not in content:
             # 在现有properties中添加
@@ -797,6 +797,7 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
                 <version>3.0.0-M9</version>
                 <configuration>
                     <testFailureIgnore>true</testFailureIgnore>
+                    <argLine>${argLine}</argLine>
                 </configuration>
             </plugin>
             <!-- JaCoCo Plugin -->
@@ -810,6 +811,9 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
                         <goals>
                             <goal>prepare-agent</goal>
                         </goals>
+                        <configuration>
+                            <propertyName>argLine</propertyName>
+                        </configuration>
                     </execution>
                     <execution>
                         <id>report</id>
@@ -817,6 +821,29 @@ def enhance_pom_simple(pom_path: str, request_id: str) -> bool:
                         <goals>
                             <goal>report</goal>
                         </goals>
+                        <configuration>
+                            <outputDirectory>${project.reporting.outputDirectory}/jacoco</outputDirectory>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>check</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>INSTRUCTION</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.00</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>'''

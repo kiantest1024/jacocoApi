@@ -422,6 +422,58 @@ def github_webhook_no_auth_debug(request: Request):
                 report_data['html_report_url'] = html_report_url
                 logger.info(f"[{request_id}] 🔗 HTML报告链接: {html_report_url}")
 
+            # 发送 Lark 机器人通知
+            notification_result = None
+            try:
+                logger.info(f"[{request_id}] 📤 发送 Lark 机器人通知...")
+
+                # 导入通知模块
+                from src.lark_notification import send_jacoco_notification
+
+                # 准备通知数据
+                notification_data = {
+                    "service_name": service_name,
+                    "commit_id": commit_id,
+                    "branch_name": branch_name,
+                    "repo_url": repo_url,
+                    "coverage_data": report_data.get("coverage_summary", {}),
+                    "html_report_url": html_report_url,
+                    "scan_method": scan_result.get("method", "unknown"),
+                    "request_id": request_id
+                }
+
+                # 获取配置管理器
+                config_manager = get_config_manager()
+
+                # 发送通知
+                success = send_jacoco_notification(
+                    repo_url=repo_url,
+                    branch_name=branch_name,
+                    commit_id=commit_id,
+                    coverage_data=report_data.get("coverage_summary", {}),
+                    scan_result=scan_result,
+                    request_id=request_id,
+                    html_report_url=html_report_url,
+                    bot_id="default"
+                )
+
+                notification_result = {
+                    "success": success,
+                    "message": "Lark 通知发送成功" if success else "Lark 通知发送失败"
+                }
+
+                if notification_result and notification_result.get("success"):
+                    logger.info(f"[{request_id}] ✅ Lark 通知发送成功")
+                else:
+                    logger.warning(f"[{request_id}] ⚠️  Lark 通知发送失败: {notification_result}")
+
+            except ImportError as import_error:
+                logger.error(f"[{request_id}] ❌ Lark 通知模块导入失败: {import_error}")
+                notification_result = {"success": False, "error": f"通知模块导入失败: {str(import_error)}"}
+            except Exception as notification_error:
+                logger.error(f"[{request_id}] ❌ Lark 通知发送异常: {notification_error}")
+                notification_result = {"success": False, "error": str(notification_error)}
+
             # 构建详细的调试响应
             response_data = {
                 "status": "completed",
@@ -432,10 +484,12 @@ def github_webhook_no_auth_debug(request: Request):
                     "scan_method": scan_result.get("method", "unknown"),
                     "scan_analysis": scan_result.get("analysis", {}),
                     "service_config": service_config,
-                    "reports_dir": reports_dir
+                    "reports_dir": reports_dir,
+                    "notification_result": notification_result
                 },
                 "scan_result": scan_result,
                 "report_data": report_data,
+                "notification_result": notification_result,
                 "extracted_info": {
                     "repo_url": repo_url,
                     "commit_id": commit_id,
@@ -481,6 +535,28 @@ def github_webhook_no_auth_debug(request: Request):
         import traceback
         logger.error(f"[{request_id}] 📋 错误堆栈: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Webhook processing failed: {str(e)}")
+
+@app.get("/config/bots")
+async def get_lark_bots():
+    """获取 Lark 机器人配置"""
+    try:
+        config_manager = get_config_manager()
+        bots = config_manager.get_lark_bots()
+        return bots
+    except Exception as e:
+        logger.error(f"获取机器人配置失败: {e}")
+        return {}
+
+@app.get("/config/mappings")
+async def get_project_mappings():
+    """获取项目映射配置"""
+    try:
+        config_manager = get_config_manager()
+        mappings = config_manager.get_project_mappings()
+        return mappings
+    except Exception as e:
+        logger.error(f"获取项目映射失败: {e}")
+        return []
 
 if __name__ == "__main__":
     import uvicorn

@@ -380,6 +380,35 @@ def run_jacoco_scan_local_debug(repo_url: str, commit_id: str, branch_name: str,
         else:
             logger.warning(f"[{request_id}] ⚠️  没有测试代码，覆盖率将为0%")
         
+        # 增强 pom.xml 以支持 JaCoCo
+        pom_path = os.path.join(temp_dir, "pom.xml")
+        if os.path.exists(pom_path):
+            logger.info(f"[{request_id}] 🔧 增强pom.xml以支持JaCoCo...")
+            pom_backup = os.path.join(temp_dir, "pom.xml.backup")
+
+            try:
+                # 备份原始文件
+                import shutil
+                shutil.copy2(pom_path, pom_backup)
+                logger.debug(f"[{request_id}] [DEBUG] 已备份pom.xml")
+
+                # 增强 pom.xml
+                from .jacoco_tasks import enhance_pom_simple
+                enhance_pom_simple(pom_path, request_id)
+                logger.info(f"[{request_id}] ✅ pom.xml增强完成")
+
+            except Exception as e:
+                logger.warning(f"[{request_id}] ⚠️  pom.xml增强失败: {str(e)}")
+                # 如果增强失败，恢复备份
+                try:
+                    if os.path.exists(pom_backup):
+                        shutil.copy2(pom_backup, pom_path)
+                        logger.info(f"[{request_id}] 🔄 已恢复原始pom.xml")
+                except Exception as restore_error:
+                    logger.error(f"[{request_id}] ❌ 恢复pom.xml失败: {restore_error}")
+        else:
+            logger.warning(f"[{request_id}] ⚠️  未找到pom.xml文件")
+
         # 运行Maven命令
         maven_goals = service_config.get('maven_goals', ['clean', 'test', 'jacoco:report'])
         logger.info(f"[{request_id}] 🔨 执行Maven目标: {maven_goals}")
